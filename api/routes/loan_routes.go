@@ -7,20 +7,14 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-func SetupRouter(loanUsecase usecase.LoanUsecase) *gin.Engine {
-	router := gin.Default()
-
+func SetupLoanRoutes(router *gin.Engine, loanUsecase usecase.LoanUsecase) {
 	// Initialize the loan handler
 	loanHandler := handler.NewLoanHandler(loanUsecase)
 
 	// Define routes
 	v1 := router.Group("/api/v1")
 	{
-		// Create loan route
 		v1.POST("/loans", loanHandler.CreateLoan)
-		// Get outstanding payments route
 		v1.GET("/loans/:loan_id/outstanding", loanHandler.GetOutstanding)
 	}
-
-	return router
 }

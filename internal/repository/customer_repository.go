@@ -38,11 +38,9 @@ func (r *customerRepository) SaveCustomer(customer *entity.Customer) error {
 
 func (r *customerRepository) GetCustomerByID(customerID uint) (*entity.Customer, error) {
 	var customerModel model.Customer
-	if err := r.db.First(&customerModel, customerID).Error; err != nil {
+	if err := r.db.Preload("Loans.Payments").First(&customerModel, customerID).Error; err != nil {
 		return nil, err
 	}
 
-	// Convert model to entity
-	customerEntity := entity.MakeCustomer(&customerModel)
-	return customerEntity, nil
+	return entity.MakeCustomer(&customerModel)
 }

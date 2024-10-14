@@ -41,7 +41,8 @@ var _ = ginkgo.Describe("Get Outstanding Endpoint", func() {
 		paymentUsecase = usecase.NewPaymentUsecase(paymentRepo)
 
 		// Setup router without running the server
-		router = routes.SetupRouter(loanUsecase)
+		router = gin.Default()
+		routes.SetupLoanRoutes(router, loanUsecase)
 	})
 
 	// Tear down after each test

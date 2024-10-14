@@ -35,7 +35,8 @@ var _ = ginkgo.Describe("Create Loan Endpoint", func() {
 		loanUsecase := usecase.NewLoanUsecase(loanRepo, customerRepo)
 
 		// Setup router without running the server
-		router = routes.SetupRouter(loanUsecase)
+		router = gin.Default()
+		routes.SetupLoanRoutes(router, loanUsecase)
 	})
 
 	// Tear down after each test

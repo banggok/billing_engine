@@ -13,6 +13,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/gin-gonic/gin"
 	"github.com/joho/godotenv"
 	log "github.com/sirupsen/logrus"
 )
@@ -53,12 +54,17 @@ func main() {
 	// Initialize usecases
 	loanUsecase := usecase.NewLoanUsecase(loanRepo, customerRepo)
 	paymentUsecase := usecase.NewPaymentUsecase(paymentRepo)
+	customerUsecase := usecase.NewCustomerUsecase(customerRepo)
 
 	// Start the daily scheduler
 	go startScheduler(paymentUsecase)
 
-	// Setup Gin router
-	router := routes.SetupRouter(loanUsecase)
+	// Initialize Gin
+	router := gin.Default()
+
+	// Setup routes
+	routes.SetupCustomerRoutes(router, customerUsecase)
+	routes.SetupLoanRoutes(router, loanUsecase)
 
 	// Create the HTTP server
 	srv := &http.Server{
