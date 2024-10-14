@@ -32,9 +32,9 @@ var _ = ginkgo.Describe("Get Outstanding Endpoint", func() {
 	ginkgo.BeforeEach(func() {
 		// Initialize the test database
 		db, sqlDB, _ = pkg.InitTestDB() // Assume this initializes a test DB
-		// Migrate the database schema for testing
-		db.AutoMigrate(&model.Customer{}, &model.Loan{}, &model.Payment{})
-
+		// Migrate the database schema for testing, and handle any migration errors
+		err := db.AutoMigrate(&model.Customer{}, &model.Loan{}, &model.Payment{})
+		Expect(err).ToNot(HaveOccurred()) // Ensure that migrations succeed
 		// Initialize repositories and use cases
 		loanRepo := repository.NewLoanRepository(db)
 		customerRepo := repository.NewCustomerRepository(db)
@@ -74,7 +74,8 @@ var _ = ginkgo.Describe("Get Outstanding Endpoint", func() {
 
 		// Parse the loan creation response to extract loan ID, week, and due date
 		var loanResponse map[string]interface{}
-		json.Unmarshal(loanResp.Body.Bytes(), &loanResponse)
+		err := json.Unmarshal(loanResp.Body.Bytes(), &loanResponse)
+		Expect(err).ToNot(HaveOccurred())
 
 		loanIDStr := loanResponse["loan_id"].(string)
 		loanID, err := strconv.Atoi(loanIDStr)
@@ -102,7 +103,8 @@ var _ = ginkgo.Describe("Get Outstanding Endpoint", func() {
 
 		// Parse the GetOutstanding response
 		var outstandingResponse map[string]interface{}
-		json.Unmarshal(outstandingResp.Body.Bytes(), &outstandingResponse)
+		err = json.Unmarshal(outstandingResp.Body.Bytes(), &outstandingResponse)
+		Expect(err).ToNot(HaveOccurred())
 
 		// Verify the outstanding amount, due date, and week
 		Expect(outstandingResponse["loan_id"]).To(Equal(loanIDStr))
@@ -127,7 +129,8 @@ var _ = ginkgo.Describe("Get Outstanding Endpoint", func() {
 		router.ServeHTTP(loanResp, loanReq)
 
 		var loanResponse map[string]interface{}
-		json.Unmarshal(loanResp.Body.Bytes(), &loanResponse)
+		err := json.Unmarshal(loanResp.Body.Bytes(), &loanResponse)
+		Expect(err).ToNot(HaveOccurred())
 
 		loanIDStr := loanResponse["loan_id"].(string)
 		loanID, err := strconv.Atoi(loanIDStr)
@@ -164,7 +167,8 @@ var _ = ginkgo.Describe("Get Outstanding Endpoint", func() {
 		Expect(outstandingResp.Code).To(Equal(http.StatusOK))
 
 		var outstandingResponse map[string]interface{}
-		json.Unmarshal(outstandingResp.Body.Bytes(), &outstandingResponse)
+		err = json.Unmarshal(outstandingResp.Body.Bytes(), &outstandingResponse)
+		Expect(err).ToNot(HaveOccurred())
 		Expect(outstandingResponse["loan_id"]).To(Equal(loanIDStr))
 		Expect(outstandingResponse["outstanding_amount"]).To(BeEquivalentTo(110000.0)) // Single pending payment amount
 		Expect(outstandingResponse["week"]).To(BeEquivalentTo(1))                      // Week 1 (first payment is pending)
@@ -187,7 +191,8 @@ var _ = ginkgo.Describe("Get Outstanding Endpoint", func() {
 		router.ServeHTTP(loanResp, loanReq)
 
 		var loanResponse map[string]interface{}
-		json.Unmarshal(loanResp.Body.Bytes(), &loanResponse)
+		err := json.Unmarshal(loanResp.Body.Bytes(), &loanResponse)
+		Expect(err).ToNot(HaveOccurred())
 
 		loanIDStr := loanResponse["loan_id"].(string)
 		loanID, err := strconv.Atoi(loanIDStr)
@@ -227,7 +232,8 @@ var _ = ginkgo.Describe("Get Outstanding Endpoint", func() {
 		Expect(outstandingResp.Code).To(Equal(http.StatusOK))
 
 		var outstandingResponse map[string]interface{}
-		json.Unmarshal(outstandingResp.Body.Bytes(), &outstandingResponse)
+		err = json.Unmarshal(outstandingResp.Body.Bytes(), &outstandingResponse)
+		Expect(err).ToNot(HaveOccurred())
 		Expect(outstandingResponse["loan_id"]).To(Equal(loanIDStr))
 
 		// Outstanding amount should sum both pending and outstanding payments (2 * 110,000 + 110,000)

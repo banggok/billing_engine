@@ -29,7 +29,8 @@ var _ = ginkgo.Describe("Create Loan Endpoint", func() {
 		// Initialize the test database
 		db, sqlDB, _ = pkg.InitTestDB() // Assume this initializes a test DB
 		// Migrate the database schema for testing
-		db.AutoMigrate(&model.Customer{}, &model.Loan{}, &model.Payment{})
+		err := db.AutoMigrate(&model.Customer{}, &model.Loan{}, &model.Payment{})
+		Expect(err).ToNot(HaveOccurred())
 
 		// Initialize repositories and use cases
 		loanRepo := repository.NewLoanRepository(db)
@@ -72,7 +73,8 @@ var _ = ginkgo.Describe("Create Loan Endpoint", func() {
 
 		// Verify the response body contains the correct loan data
 		var response map[string]interface{}
-		json.Unmarshal(resp.Body.Bytes(), &response)
+		err := json.Unmarshal(resp.Body.Bytes(), &response)
+		Expect(err).ToNot(HaveOccurred())
 
 		Expect(response["loan_id"]).NotTo(BeNil())
 		Expect(response["total_amount"]).To(BeEquivalentTo(5500000.0))      // amount + rates (5000000 + 10% = 5500000)
@@ -80,7 +82,7 @@ var _ = ginkgo.Describe("Create Loan Endpoint", func() {
 
 		// Verify that the customer was created in the database
 		var customer model.Customer
-		err := db.Where("id = ?", response["loan_id"]).First(&customer).Error
+		err = db.Where("id = ?", response["loan_id"]).First(&customer).Error
 		Expect(err).ToNot(HaveOccurred())
 		Expect(customer.Name).To(Equal("John Doe"))
 		Expect(customer.Email).To(Equal("johndoe@example.com"))

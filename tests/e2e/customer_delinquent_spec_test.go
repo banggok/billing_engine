@@ -31,7 +31,8 @@ var _ = ginkgo.Describe("Is Delinquent Endpoint", func() {
 		// Initialize the test database
 		db, sqlDB, _ = pkg.InitTestDB()
 		// Migrate the database schema for testing
-		db.AutoMigrate(&model.Customer{}, &model.Loan{}, &model.Payment{})
+		err := db.AutoMigrate(&model.Customer{}, &model.Loan{}, &model.Payment{})
+		Expect(err).ToNot(HaveOccurred())
 
 		// Initialize repositories and use cases
 		loanRepo := repository.NewLoanRepository(db)
@@ -81,7 +82,9 @@ var _ = ginkgo.Describe("Is Delinquent Endpoint", func() {
 
 		// Parse the loan creation response
 		var loanResponse map[string]interface{}
-		json.Unmarshal(resp.Body.Bytes(), &loanResponse)
+		err := json.Unmarshal(resp.Body.Bytes(), &loanResponse)
+		Expect(err).ToNot(HaveOccurred())
+
 		loanIDStr := loanResponse["loan_id"].(string)
 		loanID, err := strconv.Atoi(loanIDStr)
 		Expect(err).ToNot(HaveOccurred()) // Ensure conversion succeeded
@@ -97,7 +100,8 @@ var _ = ginkgo.Describe("Is Delinquent Endpoint", func() {
 		// Verify the response status code and body
 		Expect(resp.Code).To(Equal(http.StatusOK))
 		var response map[string]interface{}
-		json.Unmarshal(resp.Body.Bytes(), &response)
+		err = json.Unmarshal(resp.Body.Bytes(), &response)
+		Expect(err).ToNot(HaveOccurred())
 		Expect(response["is_delinquent"]).To(BeFalse()) // Customer should not be delinquent
 	})
 
@@ -120,7 +124,9 @@ var _ = ginkgo.Describe("Is Delinquent Endpoint", func() {
 
 		// Parse the loan creation response
 		var loanResponse map[string]interface{}
-		json.Unmarshal(resp.Body.Bytes(), &loanResponse)
+		err := json.Unmarshal(resp.Body.Bytes(), &loanResponse)
+		Expect(err).ToNot(HaveOccurred())
+
 		loanIDStr := loanResponse["loan_id"].(string)
 		loanID, err := strconv.Atoi(loanIDStr)
 		Expect(err).ToNot(HaveOccurred()) // Ensure conversion succeeded
@@ -141,7 +147,9 @@ var _ = ginkgo.Describe("Is Delinquent Endpoint", func() {
 		// Verify the response status code and body
 		Expect(resp.Code).To(Equal(http.StatusOK))
 		var response map[string]interface{}
-		json.Unmarshal(resp.Body.Bytes(), &response)
+		err = json.Unmarshal(resp.Body.Bytes(), &response)
+		Expect(err).ToNot(HaveOccurred())
+
 		Expect(response["is_delinquent"]).To(BeFalse()) // Customer should not be delinquent
 	})
 
@@ -164,7 +172,9 @@ var _ = ginkgo.Describe("Is Delinquent Endpoint", func() {
 
 		// Parse the loan creation response
 		var loanResponse map[string]interface{}
-		json.Unmarshal(resp.Body.Bytes(), &loanResponse)
+		err := json.Unmarshal(resp.Body.Bytes(), &loanResponse)
+		Expect(err).ToNot(HaveOccurred())
+
 		loanIDStr := loanResponse["loan_id"].(string)
 		loanID, err := strconv.Atoi(loanIDStr)
 		Expect(err).ToNot(HaveOccurred()) // Ensure conversion succeeded
@@ -189,7 +199,9 @@ var _ = ginkgo.Describe("Is Delinquent Endpoint", func() {
 		// Verify the response status code and body
 		Expect(resp.Code).To(Equal(http.StatusOK))
 		var response map[string]interface{}
-		json.Unmarshal(resp.Body.Bytes(), &response)
+		err = json.Unmarshal(resp.Body.Bytes(), &response)
+		Expect(err).ToNot(HaveOccurred())
+
 		Expect(response["is_delinquent"]).To(BeTrue()) // Customer should be delinquent
 	})
 
@@ -212,7 +224,9 @@ var _ = ginkgo.Describe("Is Delinquent Endpoint", func() {
 
 		// Parse the loan creation response
 		var loanResponse map[string]interface{}
-		json.Unmarshal(resp.Body.Bytes(), &loanResponse)
+		err := json.Unmarshal(resp.Body.Bytes(), &loanResponse)
+		Expect(err).ToNot(HaveOccurred())
+
 		loanIDStr := loanResponse["loan_id"].(string)
 		loanID, err := strconv.Atoi(loanIDStr)
 		Expect(err).ToNot(HaveOccurred()) // Ensure conversion succeeded
@@ -235,7 +249,9 @@ var _ = ginkgo.Describe("Is Delinquent Endpoint", func() {
 		// Verify the response status code and body
 		Expect(resp.Code).To(Equal(http.StatusOK))
 		var response map[string]interface{}
-		json.Unmarshal(resp.Body.Bytes(), &response)
+		err = json.Unmarshal(resp.Body.Bytes(), &response)
+		Expect(err).ToNot(HaveOccurred())
+
 		Expect(response["is_delinquent"]).To(BeTrue()) // Customer should remain delinquent
 	})
 })

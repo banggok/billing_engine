@@ -30,7 +30,8 @@ var _ = ginkgo.Describe("MakePayment Endpoint", func() {
 	ginkgo.BeforeEach(func() {
 		// Initialize the test database
 		db, sql, _ = pkg.InitTestDB()
-		db.AutoMigrate(&model.Customer{}, &model.Loan{}, &model.Payment{})
+		err := db.AutoMigrate(&model.Customer{}, &model.Loan{}, &model.Payment{})
+		Expect(err).ToNot(HaveOccurred())
 
 		// Initialize repositories and use cases
 		loanRepo := repository.NewLoanRepository(db)
@@ -67,7 +68,9 @@ var _ = ginkgo.Describe("MakePayment Endpoint", func() {
 
 		// Parse response to get loan_id
 		var loanResponse map[string]interface{}
-		json.Unmarshal(resp.Body.Bytes(), &loanResponse)
+		err := json.Unmarshal(resp.Body.Bytes(), &loanResponse)
+		Expect(err).ToNot(HaveOccurred())
+
 		loanID := loanResponse["loan_id"].(string)
 
 		// Step 2: Make a payment for week 1
@@ -77,7 +80,7 @@ var _ = ginkgo.Describe("MakePayment Endpoint", func() {
 
 		// Step 3: Verify payments in the database
 		var payments []model.Payment
-		err := db.Where("loan_id = ?", loanID).Order("week").Find(&payments).Error
+		err = db.Where("loan_id = ?", loanID).Order("week").Find(&payments).Error
 		Expect(err).ToNot(HaveOccurred())
 		Expect(payments[0].Status).To(Equal("paid"))
 		Expect(payments[1].Status).To(Equal("outstanding"))
@@ -101,12 +104,13 @@ var _ = ginkgo.Describe("MakePayment Endpoint", func() {
 
 		// Parse response to get loan_id
 		var loanResponse map[string]interface{}
-		json.Unmarshal(resp.Body.Bytes(), &loanResponse)
+		err := json.Unmarshal(resp.Body.Bytes(), &loanResponse)
+		Expect(err).ToNot(HaveOccurred())
 		loanID := loanResponse["loan_id"].(string)
 
 		// Step 2: Run scheduler for one week ahead
 		currentDate := time.Now().AddDate(0, 0, 8)
-		err := paymentUsecase.RunDaily(currentDate)
+		err = paymentUsecase.RunDaily(currentDate)
 		Expect(err).ToNot(HaveOccurred())
 
 		// Step 3: Make a payment
@@ -140,12 +144,13 @@ var _ = ginkgo.Describe("MakePayment Endpoint", func() {
 
 		// Parse response to get loan_id
 		var loanResponse map[string]interface{}
-		json.Unmarshal(resp.Body.Bytes(), &loanResponse)
+		err := json.Unmarshal(resp.Body.Bytes(), &loanResponse)
+		Expect(err).ToNot(HaveOccurred())
 		loanID := loanResponse["loan_id"].(string)
 
 		// Step 2: Run scheduler for two weeks ahead (simulate two weeks of payments)
 		currentDate := time.Now().AddDate(0, 0, 8) // 1st week
-		err := paymentUsecase.RunDaily(currentDate)
+		err = paymentUsecase.RunDaily(currentDate)
 		Expect(err).ToNot(HaveOccurred())
 
 		currentDate = time.Now().AddDate(0, 0, 15) // 2nd week
@@ -188,7 +193,9 @@ var _ = ginkgo.Describe("MakePayment Endpoint", func() {
 
 		// Parse response to get loan_id
 		var loanResponse map[string]interface{}
-		json.Unmarshal(resp.Body.Bytes(), &loanResponse)
+		err := json.Unmarshal(resp.Body.Bytes(), &loanResponse)
+		Expect(err).ToNot(HaveOccurred())
+
 		loanID := loanResponse["loan_id"].(string)
 
 		// Step 2: Loop through and make payments until all payments are made
@@ -216,7 +223,7 @@ var _ = ginkgo.Describe("MakePayment Endpoint", func() {
 
 		// Step 4: After all payments, verify that all payments are marked as paid
 		var finalPayments []model.Payment
-		err := db.Where("loan_id = ?", loanID).Order("week").Find(&finalPayments).Error
+		err = db.Where("loan_id = ?", loanID).Order("week").Find(&finalPayments).Error
 		Expect(err).ToNot(HaveOccurred())
 		for _, payment := range finalPayments {
 			Expect(payment.Status).To(Equal("paid"))

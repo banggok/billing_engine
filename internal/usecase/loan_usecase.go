@@ -180,60 +180,36 @@ func (u *loanUsecase) MakePayment(loanID uint, amount float64) error {
 	payments := loan.GetPayments()
 
 	// Calculate total outstanding amount
-	var pendingPayments []entity.Payment
-	var outstandingPayment *entity.Payment
-	var totalOutstanding float64
-
 	// Iterate through payments to classify pending and outstanding payments
-	for _, payment := range *payments {
-		if payment.Status() == "pending" {
-			pendingPayments = append(pendingPayments, payment)
-		} else if payment.Status() == "outstanding" {
-			outstandingPayment = &payment
-		}
-	}
-	switch {
-	case len(pendingPayments) == 0 && outstandingPayment != nil:
-		// Case 1: Only 1 outstanding payment
-		totalOutstanding = outstandingPayment.Amount()
-
-	case len(pendingPayments) == 1 && outstandingPayment != nil:
-		// Case 2: 1 pending payment and 1 outstanding payment
-		totalOutstanding = pendingPayments[0].Amount()
-
-	case len(pendingPayments) >= 2 && outstandingPayment != nil:
-		// Case 3: 2 or more pending payments and 1 outstanding payment
-		for _, pending := range pendingPayments {
-			totalOutstanding += pending.Amount()
-		}
-		totalOutstanding += outstandingPayment.Amount()
-	}
+	// Case 1: Only 1 outstanding payment
+	// Case 2: 1 pending payment and 1 outstanding payment
+	// Case 3: 2 or more pending payments and 1 outstanding payment
+	totalOutstanding := u.getTotalOutstanding(payments)
 
 	// Define a small epsilon value for floating-point comparison
-	const epsilon = 0.00001
-
 	// Validate the amount provided with tolerance for floating-point comparison
-	if math.Abs(totalOutstanding-amount) > epsilon {
-		return errors.New("payment amount does not match outstanding balance")
+	if err := u.validateAmount(totalOutstanding, amount); err != nil {
+		return err
 	}
 
 	// Loop through payments and mark them as 'paid' until the amount runs out
-	for _, payment := range *payments {
-		if amount >= payment.Amount() {
-			payment.SetStatus("paid")
-			amount -= payment.Amount()
-			if err := u.paymentRepo.UpdatePaymentStatus(&payment); err != nil {
-				return err
-			}
-		} else {
-			break
-		}
+	if err := u.updatePaid(payments, amount); err != nil {
+		return err
 	}
 
 	// Update the next scheduled payment to 'outstanding'
+	// If no more payments are due, mark the loan as "closed"
+	if err := u.updateNextPayment(loan); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func (u *loanUsecase) updateNextPayment(loan *entity.Loan) error {
 	nextPayment, err := u.paymentRepo.GetNextPayment(loan.GetID())
 	if err == nil && nextPayment == nil {
-		// If no more payments are due, mark the loan as "closed"
+
 		loan.SetStatus("close")
 		if err := u.loanRepo.UpdateLoanStatus(loan); err != nil {
 			return err
@@ -248,6 +224,60 @@ func (u *loanUsecase) MakePayment(loanID uint, amount float64) error {
 			return err
 		}
 	}
-
 	return nil
+}
+
+func (u *loanUsecase) updatePaid(payments *[]entity.Payment, amount float64) error {
+	for _, payment := range *payments {
+		if amount >= payment.Amount() {
+			payment.SetStatus("paid")
+			amount -= payment.Amount()
+			if err := u.paymentRepo.UpdatePaymentStatus(&payment); err != nil {
+				return err
+			}
+		} else {
+			break
+		}
+	}
+	return nil
+}
+
+func (*loanUsecase) validateAmount(totalOutstanding float64, amount float64) error {
+	const epsilon = 0.00001
+
+	if math.Abs(totalOutstanding-amount) > epsilon {
+		return errors.New("payment amount does not match outstanding balance")
+	}
+	return nil
+}
+
+func (*loanUsecase) getTotalOutstanding(payments *[]entity.Payment) float64 {
+	var pendingPayments []entity.Payment
+	var outstandingPayment *entity.Payment
+	var totalOutstanding float64
+
+	for _, payment := range *payments {
+		if payment.Status() == "pending" {
+			pendingPayments = append(pendingPayments, payment)
+		} else if payment.Status() == "outstanding" {
+			outstandingPayment = &payment
+		}
+	}
+	switch {
+	case len(pendingPayments) == 0 && outstandingPayment != nil:
+
+		totalOutstanding = outstandingPayment.Amount()
+
+	case len(pendingPayments) == 1 && outstandingPayment != nil:
+
+		totalOutstanding = pendingPayments[0].Amount()
+
+	case len(pendingPayments) >= 2 && outstandingPayment != nil:
+
+		for _, pending := range pendingPayments {
+			totalOutstanding += pending.Amount()
+		}
+		totalOutstanding += outstandingPayment.Amount()
+	}
+	return totalOutstanding
 }
