@@ -4,6 +4,7 @@ import (
 	"billing_enginee/internal/entity"
 	"billing_enginee/internal/repository"
 	"errors"
+	"math"
 	"time"
 
 	"gorm.io/gorm"
@@ -12,6 +13,7 @@ import (
 type LoanUsecase interface {
 	CreateLoan(customerID uint, name string, email string, amount float64, termWeeks int, rates float64) (*LoanResponse, error)
 	GetOutstanding(loanID uint) (*OutstandingResponse, error)
+	MakePayment(loanID uint, amount float64) error
 }
 
 type OutstandingResponse struct {
@@ -25,12 +27,18 @@ type OutstandingResponse struct {
 type loanUsecase struct {
 	loanRepo     repository.LoanRepository
 	customerRepo repository.CustomerRepository
+	paymentRepo  repository.PaymentRepository
 }
 
-func NewLoanUsecase(loanRepo repository.LoanRepository, customerRepo repository.CustomerRepository) LoanUsecase {
+func NewLoanUsecase(
+	loanRepo repository.LoanRepository,
+	customerRepo repository.CustomerRepository,
+	paymentrepo repository.PaymentRepository,
+) LoanUsecase {
 	return &loanUsecase{
 		loanRepo:     loanRepo,
 		customerRepo: customerRepo,
+		paymentRepo:  paymentrepo,
 	}
 }
 
@@ -127,7 +135,6 @@ func (u *loanUsecase) GetOutstanding(loanID uint) (*OutstandingResponse, error) 
 		}
 	}
 
-	// Logic based on the conditions
 	switch {
 	case len(pendingPayments) == 0 && outstandingPayment != nil:
 		// Case 1: Only 1 outstanding payment
@@ -161,4 +168,86 @@ func (u *loanUsecase) GetOutstanding(loanID uint) (*OutstandingResponse, error) 
 	}
 
 	return response, nil
+}
+
+func (u *loanUsecase) MakePayment(loanID uint, amount float64) error {
+	// Retrieve loan along with outstanding and pending payments by loan number
+	loan, err := u.loanRepo.GetOutstandingPayments(loanID)
+	if err != nil {
+		return err
+	}
+
+	payments := loan.GetPayments()
+
+	// Calculate total outstanding amount
+	var pendingPayments []entity.Payment
+	var outstandingPayment *entity.Payment
+	var totalOutstanding float64
+
+	// Iterate through payments to classify pending and outstanding payments
+	for _, payment := range *payments {
+		if payment.Status() == "pending" {
+			pendingPayments = append(pendingPayments, payment)
+		} else if payment.Status() == "outstanding" {
+			outstandingPayment = &payment
+		}
+	}
+	switch {
+	case len(pendingPayments) == 0 && outstandingPayment != nil:
+		// Case 1: Only 1 outstanding payment
+		totalOutstanding = outstandingPayment.Amount()
+
+	case len(pendingPayments) == 1 && outstandingPayment != nil:
+		// Case 2: 1 pending payment and 1 outstanding payment
+		totalOutstanding = pendingPayments[0].Amount()
+
+	case len(pendingPayments) >= 2 && outstandingPayment != nil:
+		// Case 3: 2 or more pending payments and 1 outstanding payment
+		for _, pending := range pendingPayments {
+			totalOutstanding += pending.Amount()
+		}
+		totalOutstanding += outstandingPayment.Amount()
+	}
+
+	// Define a small epsilon value for floating-point comparison
+	const epsilon = 0.00001
+
+	// Validate the amount provided with tolerance for floating-point comparison
+	if math.Abs(totalOutstanding-amount) > epsilon {
+		return errors.New("payment amount does not match outstanding balance")
+	}
+
+	// Loop through payments and mark them as 'paid' until the amount runs out
+	for _, payment := range *payments {
+		if amount >= payment.Amount() {
+			payment.SetStatus("paid")
+			amount -= payment.Amount()
+			if err := u.paymentRepo.UpdatePaymentStatus(&payment); err != nil {
+				return err
+			}
+		} else {
+			break
+		}
+	}
+
+	// Update the next scheduled payment to 'outstanding'
+	nextPayment, err := u.paymentRepo.GetNextPayment(loan.GetID())
+	if err == nil && nextPayment == nil {
+		// If no more payments are due, mark the loan as "closed"
+		loan.SetStatus("close")
+		if err := u.loanRepo.UpdateLoanStatus(loan); err != nil {
+			return err
+		} else {
+			return nil
+		}
+	}
+
+	if err == nil && nextPayment.Status() == "scheduled" {
+		nextPayment.SetStatus("outstanding")
+		if err := u.paymentRepo.UpdatePaymentStatus(nextPayment); err != nil {
+			return err
+		}
+	}
+
+	return nil
 }

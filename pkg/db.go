@@ -54,7 +54,7 @@ func InitDB() (*gorm.DB, *sql.DB, error) {
 	return DB, sqlDB, nil
 }
 
-func InitTestDB() (*gorm.DB, error) {
+func InitTestDB() (*gorm.DB, *sql.DB, error) {
 	// Load the .env.test file
 	err = godotenv.Load("../../.env.test")
 	if err != nil {
@@ -68,14 +68,32 @@ func InitTestDB() (*gorm.DB, error) {
 	password := os.Getenv("DB_PASSWORD")
 	dbname := os.Getenv("DB_NAME")
 
-	// Create DSN for the test DB
+	// Create the DSN (Data Source Name)
 	dsn := fmt.Sprintf("host=%s user=%s password=%s dbname=%s port=%s sslmode=disable", host, user, password, dbname, port)
 
-	// Connect to the test database
-	db, err := gorm.Open(postgres.Open(dsn), &gorm.Config{})
+	// Open the database connection with custom GORM logger
+	DB, err = gorm.Open(postgres.Open(dsn), &gorm.Config{
+		PrepareStmt: true, // Prepare statements for better performance
+		QueryFields: true, // Log all query fields
+		Logger: logger.New(
+			log.New(os.Stdout, "\r\n", log.LstdFlags), // Log to stdout
+			logger.Config{
+				SlowThreshold:             time.Second,   // Log slow queries
+				LogLevel:                  logger.Silent, // Set log level (adjust as needed)
+				IgnoreRecordNotFoundError: true,          // Ignore ErrRecordNotFound
+				Colorful:                  true,          // Enable colorful logs
+			},
+		),
+	})
 	if err != nil {
-		return nil, err
+		return nil, nil, fmt.Errorf("failed to connect to database: %w", err)
 	}
 
-	return db, nil
+	// Get the underlying sql.DB connection from the gorm.DB
+	sqlDB, err := DB.DB()
+	if err != nil {
+		return nil, nil, fmt.Errorf("failed to get sql.DB from gorm.DB: %w", err)
+	}
+
+	return DB, sqlDB, nil
 }

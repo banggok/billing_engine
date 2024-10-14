@@ -3,6 +3,7 @@ package repository
 import (
 	"billing_enginee/internal/entity"
 	"billing_enginee/internal/model"
+	"errors"
 	"time"
 
 	"gorm.io/gorm"
@@ -11,6 +12,7 @@ import (
 type PaymentRepository interface {
 	GetPaymentsDueBeforeDateWithStatus(nextWeek time.Time) ([]*entity.Payment, error)
 	UpdatePaymentStatus(payment *entity.Payment) error
+	GetNextPayment(loanID uint) (*entity.Payment, error)
 }
 
 type paymentRepository struct {
@@ -45,4 +47,20 @@ func (r *paymentRepository) GetPaymentsDueBeforeDateWithStatus(nextWeek time.Tim
 // Update the status of the payment
 func (r *paymentRepository) UpdatePaymentStatus(payment *entity.Payment) error {
 	return r.db.Model(&model.Payment{}).Where("id = ?", payment.GetID()).Update("status", payment.Status()).Error
+}
+
+func (r *paymentRepository) GetNextPayment(loanID uint) (*entity.Payment, error) {
+	var paymentModel model.Payment
+	err := r.db.Where("loan_id = ? AND status IN ?", loanID, []string{"scheduled", "outstanding"}).Order("week asc").First(&paymentModel).Error
+
+	// Handle case when no record is found
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, nil // No next payment found
+		}
+		return nil, err // Return the actual error if it's not ErrRecordNotFound
+	}
+
+	// Convert model to entity and return
+	return entity.MakePayment(&paymentModel), nil
 }

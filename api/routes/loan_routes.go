@@ -16,5 +16,6 @@ func SetupLoanRoutes(router *gin.Engine, loanUsecase usecase.LoanUsecase) {
 	{
 		v1.POST("/loans", loanHandler.CreateLoan)
 		v1.GET("/loans/:loan_id/outstanding", loanHandler.GetOutstanding)
+		v1.POST("/loans/:loan_id/payment", loanHandler.MakePayment) // Route for making a payment
 	}
 }

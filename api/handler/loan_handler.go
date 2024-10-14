@@ -77,3 +77,29 @@ func (h *LoanHandler) GetOutstanding(c *gin.Context) {
 		"week":               response.WeeksOutstanding,
 	})
 }
+
+func (h *LoanHandler) MakePayment(c *gin.Context) {
+
+	loanIDParam := c.Param("loan_id")
+	loanID, err := strconv.ParseUint(loanIDParam, 10, 32)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid loan ID"})
+		return
+	}
+
+	amountStr := c.Query("amount")
+	amount, err := strconv.ParseFloat(amountStr, 64)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid amount"})
+		return
+	}
+
+	// Call the use case to process the payment
+	err = h.loanUsecase.MakePayment(uint(loanID), amount)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"message": "Payment successful"})
+}

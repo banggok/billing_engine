@@ -7,6 +7,7 @@ import (
 	"billing_enginee/internal/usecase"
 	"billing_enginee/pkg"
 	"bytes"
+	"database/sql"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -21,18 +22,20 @@ import (
 var _ = ginkgo.Describe("Create Loan Endpoint", func() {
 	var db *gorm.DB
 	var router *gin.Engine
+	var sqlDB *sql.DB
 
 	// Set up the test environment before each test
 	ginkgo.BeforeEach(func() {
 		// Initialize the test database
-		db, _ = pkg.InitTestDB() // Assume this initializes a test DB
+		db, sqlDB, _ = pkg.InitTestDB() // Assume this initializes a test DB
 		// Migrate the database schema for testing
 		db.AutoMigrate(&model.Customer{}, &model.Loan{}, &model.Payment{})
 
 		// Initialize repositories and use cases
 		loanRepo := repository.NewLoanRepository(db)
 		customerRepo := repository.NewCustomerRepository(db)
-		loanUsecase := usecase.NewLoanUsecase(loanRepo, customerRepo)
+		paymentRepo := repository.NewPaymentRepository(db)
+		loanUsecase := usecase.NewLoanUsecase(loanRepo, customerRepo, paymentRepo)
 
 		// Setup router without running the server
 		router = gin.Default()
@@ -43,6 +46,7 @@ var _ = ginkgo.Describe("Create Loan Endpoint", func() {
 	ginkgo.AfterEach(func() {
 		// Clean up the database by truncating tables
 		db.Exec("TRUNCATE TABLE loans, customers, payments RESTART IDENTITY CASCADE;")
+		sqlDB.Close()
 	})
 
 	ginkgo.It("should create a loan and verify it in the database", func() {

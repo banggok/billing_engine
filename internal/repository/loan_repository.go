@@ -12,6 +12,7 @@ type LoanRepository interface {
 	GetLoanByID(loanID uint) (*entity.Loan, error)
 	SavePayments(payments []*entity.Payment) error
 	GetOutstandingPayments(loanID uint) (*entity.Loan, error)
+	UpdateLoanStatus(loan *entity.Loan) error
 }
 
 type loanRepository struct {
@@ -90,4 +91,12 @@ func (r *loanRepository) GetOutstandingPayments(loanID uint) (*entity.Loan, erro
 	}
 
 	return loanEntity, nil
+}
+
+func (r *loanRepository) UpdateLoanStatus(loan *entity.Loan) error {
+	// Convert entity.Loan to model.Loan
+	loanModel := loan.ToModel()
+
+	// Update the status in the database using the loan's ID
+	return r.db.Model(&model.Loan{}).Where("id = ?", loanModel.ID).Update("status", loanModel.Status).Error
 }

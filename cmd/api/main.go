@@ -52,7 +52,7 @@ func main() {
 	paymentRepo := repository.NewPaymentRepository(db)
 
 	// Initialize usecases
-	loanUsecase := usecase.NewLoanUsecase(loanRepo, customerRepo)
+	loanUsecase := usecase.NewLoanUsecase(loanRepo, customerRepo, paymentRepo)
 	paymentUsecase := usecase.NewPaymentUsecase(paymentRepo)
 	customerUsecase := usecase.NewCustomerUsecase(customerRepo)
 

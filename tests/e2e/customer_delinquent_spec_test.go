@@ -7,6 +7,7 @@ import (
 	"billing_enginee/internal/usecase"
 	"billing_enginee/pkg"
 	"bytes"
+	"database/sql"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -21,13 +22,14 @@ import (
 
 var _ = ginkgo.Describe("Is Delinquent Endpoint", func() {
 	var db *gorm.DB
+	var sqlDB *sql.DB
 	var router *gin.Engine
 	var paymentUsecase usecase.PaymentUsecase
 
 	// Set up the test environment before each test
 	ginkgo.BeforeEach(func() {
 		// Initialize the test database
-		db, _ = pkg.InitTestDB()
+		db, sqlDB, _ = pkg.InitTestDB()
 		// Migrate the database schema for testing
 		db.AutoMigrate(&model.Customer{}, &model.Loan{}, &model.Payment{})
 
@@ -35,7 +37,7 @@ var _ = ginkgo.Describe("Is Delinquent Endpoint", func() {
 		loanRepo := repository.NewLoanRepository(db)
 		customerRepo := repository.NewCustomerRepository(db)
 		paymentRepo := repository.NewPaymentRepository(db)
-		loanUsecase := usecase.NewLoanUsecase(loanRepo, customerRepo)
+		loanUsecase := usecase.NewLoanUsecase(loanRepo, customerRepo, paymentRepo)
 		paymentUsecase = usecase.NewPaymentUsecase(paymentRepo)
 		customerUsecase := usecase.NewCustomerUsecase(customerRepo)
 
@@ -49,6 +51,7 @@ var _ = ginkgo.Describe("Is Delinquent Endpoint", func() {
 	ginkgo.AfterEach(func() {
 		// Clean up the database by truncating tables
 		db.Exec("TRUNCATE TABLE loans, customers, payments RESTART IDENTITY CASCADE;")
+		sqlDB.Close()
 	})
 
 	// Helper function to get customer_id from the database using loan_id

@@ -134,3 +134,13 @@ func (l *Loan) SetPayments(payments *[]Payment) {
 func (l *Loan) GetPayments() *[]Payment {
 	return l.payments
 }
+
+// SetStatus sets the status of the loan
+func (l *Loan) SetStatus(status string) {
+	l.status = status
+}
+
+// GetStatus gets the status of the loan
+func (l *Loan) GetStatus() string {
+	return l.status
+}
