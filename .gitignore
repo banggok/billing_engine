@@ -2,3 +2,4 @@ coverage.out
 coverage.html
 .env
 .env.test
+.scannerwork/report-task.txt

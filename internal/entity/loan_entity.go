@@ -3,6 +3,7 @@ package entity
 import (
 	"billing_enginee/internal/model"
 	"errors"
+	"math"
 	"time"
 )
 
@@ -106,6 +107,52 @@ func (l *Loan) HasOneOutstandingPayment() error {
 
 	if outstandingCount > 1 {
 		return errors.New("more than one outstanding payment found, this is a bug in the system")
+	}
+	return nil
+}
+
+func (l *Loan) ValidateAmount(amount float64) error {
+	if l.GetTotalOutstandingAmount() == nil {
+		return errors.New("payement can not be empty")
+	}
+	const epsilon = 0.00001
+	totalOA := l.GetTotalOutstandingAmount()
+	if math.Abs(*totalOA-amount) > epsilon {
+		return errors.New("payment amount does not match outstanding balance")
+	}
+	return nil
+}
+
+func (l *Loan) GetTotalOutstandingAmount() *float64 {
+	if l.payments != nil {
+		var pendingPayments []Payment
+		var outstandingPayment *Payment
+		var totalOutstanding float64
+
+		for _, payment := range *l.payments {
+			if payment.Status() == "pending" {
+				pendingPayments = append(pendingPayments, payment)
+			} else if payment.Status() == "outstanding" {
+				outstandingPayment = &payment
+			}
+		}
+		switch {
+		case len(pendingPayments) == 0 && outstandingPayment != nil:
+
+			totalOutstanding = outstandingPayment.Amount()
+
+		case len(pendingPayments) == 1 && outstandingPayment != nil:
+
+			totalOutstanding = pendingPayments[0].Amount()
+
+		case len(pendingPayments) >= 2 && outstandingPayment != nil:
+
+			for _, pending := range pendingPayments {
+				totalOutstanding += pending.Amount()
+			}
+			totalOutstanding += outstandingPayment.Amount()
+		}
+		return &totalOutstanding
 	}
 	return nil
 }

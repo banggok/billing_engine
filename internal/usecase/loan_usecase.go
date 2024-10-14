@@ -4,7 +4,6 @@ import (
 	"billing_enginee/internal/entity"
 	"billing_enginee/internal/repository"
 	"errors"
-	"math"
 	"time"
 
 	"gorm.io/gorm"
@@ -179,16 +178,9 @@ func (u *loanUsecase) MakePayment(loanID uint, amount float64) error {
 
 	payments := loan.GetPayments()
 
-	// Calculate total outstanding amount
-	// Iterate through payments to classify pending and outstanding payments
-	// Case 1: Only 1 outstanding payment
-	// Case 2: 1 pending payment and 1 outstanding payment
-	// Case 3: 2 or more pending payments and 1 outstanding payment
-	totalOutstanding := u.getTotalOutstanding(payments)
-
 	// Define a small epsilon value for floating-point comparison
 	// Validate the amount provided with tolerance for floating-point comparison
-	if err := u.validateAmount(totalOutstanding, amount); err != nil {
+	if err := loan.ValidateAmount(amount); err != nil {
 		return err
 	}
 
@@ -240,44 +232,4 @@ func (u *loanUsecase) updatePaid(payments *[]entity.Payment, amount float64) err
 		}
 	}
 	return nil
-}
-
-func (*loanUsecase) validateAmount(totalOutstanding float64, amount float64) error {
-	const epsilon = 0.00001
-
-	if math.Abs(totalOutstanding-amount) > epsilon {
-		return errors.New("payment amount does not match outstanding balance")
-	}
-	return nil
-}
-
-func (*loanUsecase) getTotalOutstanding(payments *[]entity.Payment) float64 {
-	var pendingPayments []entity.Payment
-	var outstandingPayment *entity.Payment
-	var totalOutstanding float64
-
-	for _, payment := range *payments {
-		if payment.Status() == "pending" {
-			pendingPayments = append(pendingPayments, payment)
-		} else if payment.Status() == "outstanding" {
-			outstandingPayment = &payment
-		}
-	}
-	switch {
-	case len(pendingPayments) == 0 && outstandingPayment != nil:
-
-		totalOutstanding = outstandingPayment.Amount()
-
-	case len(pendingPayments) == 1 && outstandingPayment != nil:
-
-		totalOutstanding = pendingPayments[0].Amount()
-
-	case len(pendingPayments) >= 2 && outstandingPayment != nil:
-
-		for _, pending := range pendingPayments {
-			totalOutstanding += pending.Amount()
-		}
-		totalOutstanding += outstandingPayment.Amount()
-	}
-	return totalOutstanding
 }
