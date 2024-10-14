@@ -98,33 +98,66 @@ func (u *loanUsecase) CreateLoan(customerID uint, name string, email string, amo
 }
 
 func (u *loanUsecase) GetOutstanding(loanID uint) (*OutstandingResponse, error) {
-	// Fetch outstanding payments from the repository
-	outstandingPayments, err := u.loanRepo.GetOutstandingPayments(loanID)
+	// Fetch the loan with outstanding payments from the repository
+	loan, err := u.loanRepo.GetOutstandingPayments(loanID)
 	if err != nil {
 		return nil, err
 	}
 
-	if len(outstandingPayments) == 0 {
+	// Get payments from the loan
+	payments := loan.GetPayments()
+
+	if len(*payments) == 0 {
 		return nil, nil // No outstanding payments
 	}
 
-	// Sum outstanding amounts and get latest due date
+	// Initialize variables for pending, outstanding, and total outstanding amounts
+	var pendingPayments []entity.Payment
+	var outstandingPayment *entity.Payment
 	var totalOutstanding float64
 	var latestDueDate time.Time
-	for _, payment := range outstandingPayments {
-		totalOutstanding += payment.Amount()
-		if payment.DueDate().After(latestDueDate) {
-			latestDueDate = payment.DueDate()
+	var latestWeek int
+
+	// Iterate through payments to classify pending and outstanding payments
+	for _, payment := range *payments {
+		if payment.Status() == "pending" {
+			pendingPayments = append(pendingPayments, payment)
+		} else if payment.Status() == "outstanding" {
+			outstandingPayment = &payment
 		}
 	}
 
-	// Get the total amount from the loan
+	// Logic based on the conditions
+	switch {
+	case len(pendingPayments) == 0 && outstandingPayment != nil:
+		// Case 1: Only 1 outstanding payment
+		totalOutstanding = outstandingPayment.Amount()
+		latestDueDate = outstandingPayment.DueDate()
+		latestWeek = outstandingPayment.Week()
+
+	case len(pendingPayments) == 1 && outstandingPayment != nil:
+		// Case 2: 1 pending payment and 1 outstanding payment
+		totalOutstanding = pendingPayments[0].Amount()
+		latestDueDate = pendingPayments[0].DueDate()
+		latestWeek = pendingPayments[0].Week()
+
+	case len(pendingPayments) >= 2 && outstandingPayment != nil:
+		// Case 3: 2 or more pending payments and 1 outstanding payment
+		for _, pending := range pendingPayments {
+			totalOutstanding += pending.Amount()
+		}
+		totalOutstanding += outstandingPayment.Amount()
+		latestDueDate = outstandingPayment.DueDate()
+		latestWeek = outstandingPayment.Week()
+	}
+
+	// Prepare the response with total amount and outstanding details
 	response := &OutstandingResponse{
-		LoanID:            loanID,
-		TotalAmount:       outstandingPayments[0].Loan().TotalAmount(), // Corrected here
+		LoanID:            loan.GetID(),
+		TotalAmount:       loan.TotalAmount(),
 		OutstandingAmount: totalOutstanding,
 		DueDate:           latestDueDate,
-		WeeksOutstanding:  len(outstandingPayments),
+		WeeksOutstanding:  latestWeek, // Week of the latest outstanding payment
 	}
 
 	return response, nil

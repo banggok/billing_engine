@@ -11,7 +11,7 @@ type LoanRepository interface {
 	SaveLoan(loan *entity.Loan) error
 	GetLoanByID(loanID uint) (*entity.Loan, error)
 	SavePayments(payments []*entity.Payment) error
-	GetOutstandingPayments(loanID uint) ([]*entity.Payment, error)
+	GetOutstandingPayments(loanID uint) (*entity.Loan, error)
 }
 
 type loanRepository struct {
@@ -45,7 +45,11 @@ func (r *loanRepository) GetLoanByID(loanID uint) (*entity.Loan, error) {
 	}
 
 	// Convert model to entity
-	loanEntity := entity.MakeLoan(&loanModel)
+	loanEntity, err := entity.MakeLoan(&loanModel) // Now handling the error
+	if err != nil {
+		return nil, err
+	}
+
 	return loanEntity, nil
 }
 
@@ -69,26 +73,21 @@ func (r *loanRepository) SavePayments(payments []*entity.Payment) error {
 	return nil
 }
 
-func (r *loanRepository) GetOutstandingPayments(loanID uint) ([]*entity.Payment, error) {
-	var paymentModels []model.Payment
+func (r *loanRepository) GetOutstandingPayments(loanID uint) (*entity.Loan, error) {
+	var loanModel model.Loan
 
-	// Query outstanding payments and preload the associated loan
-	if err := r.db.Where("loan_id = ? AND status = ?", loanID, "outstanding").Preload("Loan").Find(&paymentModels).Error; err != nil {
+	// Query loan and preload payments with status 'pending' or 'outstanding', ordered by week ascending
+	if err := r.db.Preload("Payments", func(db *gorm.DB) *gorm.DB {
+		return db.Where("status IN ?", []string{"pending", "outstanding"}).Order("week ASC")
+	}).First(&loanModel, loanID).Error; err != nil {
 		return nil, err
 	}
 
-	// Convert to entities
-	outstandingPayments := make([]*entity.Payment, len(paymentModels))
-	for i, model := range paymentModels {
-		payment := entity.MakePayment(&model)
-
-		// Convert model to entity and set the loan
-		loanModel := model.Loan
-		loan := entity.MakeLoan(&loanModel)
-		payment.SetLoan(loan)
-
-		outstandingPayments[i] = payment
+	// Convert loan model to loan entity, including payments
+	loanEntity, err := entity.MakeLoan(&loanModel)
+	if err != nil {
+		return nil, err
 	}
 
-	return outstandingPayments, nil
+	return loanEntity, nil
 }

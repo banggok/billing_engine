@@ -81,3 +81,7 @@ func (p *Payment) Status() string {
 func (p *Payment) SetStatus(status string) {
 	p.status = status
 }
+
+func (p *Payment) Week() int {
+	return p.week
+}

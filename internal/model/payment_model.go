@@ -11,7 +11,7 @@ type Payment struct {
 	Week      int       `gorm:"not null"`
 	Amount    float64   `gorm:"type:numeric(12,2);not null"`
 	DueDate   time.Time `gorm:"type:date;not null"`
-	Status    string    `gorm:"type:payment_status;default:'scheduled'"` // Enum for status
+	Status    string    `gorm:"type:payment_status;default:'scheduled';index"` // Enum for status, with index
 	CreatedAt time.Time `gorm:"default:CURRENT_TIMESTAMP"`
 	UpdatedAt time.Time `gorm:"autoUpdateTime"`
 }

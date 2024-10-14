@@ -15,4 +15,7 @@ type Loan struct {
 	Rates       float64   `gorm:"type:numeric(5,2);not null"`
 	CreatedAt   time.Time `gorm:"default:CURRENT_TIMESTAMP"`
 	UpdatedAt   time.Time `gorm:"autoUpdateTime"`
+
+	Payments *[]Payment `gorm:"foreignKey:LoanID"` // Foreign key relationship
+
 }

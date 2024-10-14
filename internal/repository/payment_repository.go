@@ -9,7 +9,7 @@ import (
 )
 
 type PaymentRepository interface {
-	GetScheduledPaymentsDueInAWeek(nextWeek time.Time) ([]*entity.Payment, error)
+	GetPaymentsDueBeforeDateWithStatus(nextWeek time.Time) ([]*entity.Payment, error)
 	UpdatePaymentStatus(payment *entity.Payment) error
 }
 
@@ -23,11 +23,13 @@ func NewPaymentRepository(db *gorm.DB) PaymentRepository {
 	}
 }
 
-// Fetch payments due in a week with status 'scheduled'
-func (r *paymentRepository) GetScheduledPaymentsDueInAWeek(nextWeek time.Time) ([]*entity.Payment, error) {
+// Fetch payments due before nextWeek (ignoring time) with status 'scheduled' or 'outstanding'
+func (r *paymentRepository) GetPaymentsDueBeforeDateWithStatus(nextWeek time.Time) ([]*entity.Payment, error) {
 	var paymentModels []model.Payment
 
-	if err := r.db.Where("due_date <= ? AND status = ?", nextWeek, "scheduled").Find(&paymentModels).Error; err != nil {
+	// Fetch payments where due_date < nextWeek (comparing dates only) and status is 'scheduled' or 'outstanding'
+	if err := r.db.Where("DATE(due_date) < ? AND status IN ?", nextWeek.Format("2006-01-02"), []string{"scheduled", "outstanding"}).
+		Find(&paymentModels).Error; err != nil {
 		return nil, err
 	}
 
