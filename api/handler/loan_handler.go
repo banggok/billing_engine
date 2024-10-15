@@ -1,6 +1,7 @@
 package handler
 
 import (
+	loan_dto_handler "billing_enginee/api/handler/dto/loan"
 	"billing_enginee/internal/usecase"
 	"net/http"
 	"strconv"
@@ -18,17 +19,8 @@ func NewLoanHandler(loanUsecase usecase.LoanUsecase) *LoanHandler {
 	}
 }
 
-type CreateLoanRequest struct {
-	CustomerID uint    `json:"customer_id" binding:"required"`
-	Name       string  `json:"name" binding:"required"`
-	Email      string  `json:"email" binding:"required"`
-	Amount     float64 `json:"amount" binding:"required"`
-	TermWeeks  int     `json:"term_weeks" binding:"required"`
-	Rates      float64 `json:"rates" binding:"required"`
-}
-
 func (h *LoanHandler) CreateLoan(c *gin.Context) {
-	var request CreateLoanRequest
+	var request loan_dto_handler.CreateLoanRequest
 
 	// Validate the request payload
 	if err := c.ShouldBindJSON(&request); err != nil {
