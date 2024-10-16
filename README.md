@@ -79,6 +79,7 @@ make sonar
 │
 ├── /api
 │   ├── /handler        # Contains API handlers for processing HTTP requests
+│   ├── /middleware     # Contains middleware to handle request
 │   ├── /routes         # Defines the routes for the application
 │
 ├── /cmd
