@@ -8,26 +8,23 @@ import (
 )
 
 type CustomerRepository interface {
-	SaveCustomer(customer *entity.Customer) error
-	GetCustomerByID(customerID uint) (*entity.Customer, error)
+	SaveCustomer(tx *gorm.DB, customer *entity.Customer) error
+	GetCustomerByID(tx *gorm.DB, customerID uint) (*entity.Customer, error)
 }
 
 type customerRepository struct {
-	db *gorm.DB
 }
 
-func NewCustomerRepository(db *gorm.DB) CustomerRepository {
-	return &customerRepository{
-		db: db,
-	}
+func NewCustomerRepository() CustomerRepository {
+	return &customerRepository{}
 }
 
-func (r *customerRepository) SaveCustomer(customer *entity.Customer) error {
+func (r *customerRepository) SaveCustomer(tx *gorm.DB, customer *entity.Customer) error {
 	// Convert entity.Customer to model.Customer
 	customerModel := customer.ToModel()
 
 	// Save customer to the database
-	if err := r.db.Create(&customerModel).Error; err != nil {
+	if err := tx.Create(&customerModel).Error; err != nil {
 		return err
 	}
 
@@ -36,9 +33,9 @@ func (r *customerRepository) SaveCustomer(customer *entity.Customer) error {
 	return nil
 }
 
-func (r *customerRepository) GetCustomerByID(customerID uint) (*entity.Customer, error) {
+func (r *customerRepository) GetCustomerByID(tx *gorm.DB, customerID uint) (*entity.Customer, error) {
 	var customerModel model.Customer
-	if err := r.db.Preload("Loans.Payments").First(&customerModel, customerID).Error; err != nil {
+	if err := tx.Preload("Loans.Payments").First(&customerModel, customerID).Error; err != nil {
 		return nil, err
 	}
 

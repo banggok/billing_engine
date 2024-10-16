@@ -1,6 +1,7 @@
 package e2e_test
 
 import (
+	"billing_enginee/api/middleware"
 	"billing_enginee/api/routes"
 	"billing_enginee/internal/model"
 	"billing_enginee/internal/repository"
@@ -33,13 +34,14 @@ var _ = ginkgo.Describe("Create Loan Endpoint", func() {
 		Expect(err).ToNot(HaveOccurred())
 
 		// Initialize repositories and use cases
-		loanRepo := repository.NewLoanRepository(db)
-		customerRepo := repository.NewCustomerRepository(db)
-		paymentRepo := repository.NewPaymentRepository(db)
+		loanRepo := repository.NewLoanRepository()
+		customerRepo := repository.NewCustomerRepository()
+		paymentRepo := repository.NewPaymentRepository()
 		loanUsecase := usecase.NewLoanUsecase(loanRepo, customerRepo, paymentRepo)
 
 		// Setup router without running the server
 		router = gin.Default()
+		router.Use(middleware.TransactionMiddleware(db))
 		routes.SetupLoanRoutes(router, loanUsecase)
 	})
 
@@ -149,5 +151,4 @@ var _ = ginkgo.Describe("Create Loan Endpoint", func() {
 		Expect(errors["rates"]).To(ContainSubstring("rates is required"))
 	})
 
-	// Test case: Validating incorrect formats
 })

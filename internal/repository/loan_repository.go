@@ -8,29 +8,25 @@ import (
 )
 
 type LoanRepository interface {
-	SaveLoan(loan *entity.Loan) error
-	GetLoanByID(loanID uint) (*entity.Loan, error)
-	SavePayments(payments []*entity.Payment) error
-	GetOutstandingPayments(loanID uint) (*entity.Loan, error)
-	UpdateLoanStatus(loan *entity.Loan) error
+	SaveLoan(tx *gorm.DB, loan *entity.Loan) error
+	GetLoanByID(tx *gorm.DB, loanID uint) (*entity.Loan, error)
+	GetOutstandingPayments(tx *gorm.DB, loanID uint) (*entity.Loan, error)
+	UpdateLoanStatus(tx *gorm.DB, loan *entity.Loan) error
 }
 
 type loanRepository struct {
-	db *gorm.DB
 }
 
-func NewLoanRepository(db *gorm.DB) LoanRepository {
-	return &loanRepository{
-		db: db,
-	}
+func NewLoanRepository() LoanRepository {
+	return &loanRepository{}
 }
 
-func (r *loanRepository) SaveLoan(loan *entity.Loan) error {
+func (r *loanRepository) SaveLoan(tx *gorm.DB, loan *entity.Loan) error {
 	// Convert entity.Loan to model.Loan
 	loanModel := loan.ToModel()
 
 	// Save loan to the database
-	if err := r.db.Create(&loanModel).Error; err != nil {
+	if err := tx.Create(&loanModel).Error; err != nil {
 		return err
 	}
 
@@ -39,9 +35,9 @@ func (r *loanRepository) SaveLoan(loan *entity.Loan) error {
 	return nil
 }
 
-func (r *loanRepository) GetLoanByID(loanID uint) (*entity.Loan, error) {
+func (r *loanRepository) GetLoanByID(tx *gorm.DB, loanID uint) (*entity.Loan, error) {
 	var loanModel model.Loan
-	if err := r.db.First(&loanModel, loanID).Error; err != nil {
+	if err := tx.First(&loanModel, loanID).Error; err != nil {
 		return nil, err
 	}
 
@@ -54,31 +50,11 @@ func (r *loanRepository) GetLoanByID(loanID uint) (*entity.Loan, error) {
 	return loanEntity, nil
 }
 
-func (r *loanRepository) SavePayments(payments []*entity.Payment) error {
-	// Convert entity.Payment to model.Payment
-	paymentModels := make([]model.Payment, len(payments))
-	for i, payment := range payments {
-		paymentModels[i] = *payment.ToModel()
-	}
-
-	// Save payments to the database
-	if err := r.db.Create(&paymentModels).Error; err != nil {
-		return err
-	}
-
-	// Update entities with generated IDs
-	for i, paymentModel := range paymentModels {
-		payments[i].SetID(paymentModel.ID)
-	}
-
-	return nil
-}
-
-func (r *loanRepository) GetOutstandingPayments(loanID uint) (*entity.Loan, error) {
+func (r *loanRepository) GetOutstandingPayments(tx *gorm.DB, loanID uint) (*entity.Loan, error) {
 	var loanModel model.Loan
 
 	// Query loan and preload payments with status 'pending' or 'outstanding', ordered by week ascending
-	if err := r.db.Preload("Payments", func(db *gorm.DB) *gorm.DB {
+	if err := tx.Preload("Payments", func(db *gorm.DB) *gorm.DB {
 		return db.Where("status IN ?", []string{"pending", "outstanding"}).Order("week ASC")
 	}).First(&loanModel, loanID).Error; err != nil {
 		return nil, err
@@ -93,10 +69,10 @@ func (r *loanRepository) GetOutstandingPayments(loanID uint) (*entity.Loan, erro
 	return loanEntity, nil
 }
 
-func (r *loanRepository) UpdateLoanStatus(loan *entity.Loan) error {
+func (r *loanRepository) UpdateLoanStatus(tx *gorm.DB, loan *entity.Loan) error {
 	// Convert entity.Loan to model.Loan
 	loanModel := loan.ToModel()
 
 	// Update the status in the database using the loan's ID
-	return r.db.Model(&model.Loan{}).Where("id = ?", loanModel.ID).Update("status", loanModel.Status).Error
+	return tx.Model(&model.Loan{}).Where("id = ?", loanModel.ID).Update("status", loanModel.Status).Error
 }

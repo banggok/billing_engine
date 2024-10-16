@@ -1,6 +1,7 @@
 package e2e_test
 
 import (
+	"billing_enginee/api/middleware"
 	"billing_enginee/api/routes"
 	"billing_enginee/internal/model"
 	"billing_enginee/internal/repository"
@@ -34,13 +35,15 @@ var _ = ginkgo.Describe("MakePayment Endpoint", func() {
 		Expect(err).ToNot(HaveOccurred())
 
 		// Initialize repositories and use cases
-		loanRepo := repository.NewLoanRepository(db)
-		customerRepo := repository.NewCustomerRepository(db)
-		paymentRepo := repository.NewPaymentRepository(db)
+		loanRepo := repository.NewLoanRepository()
+		customerRepo := repository.NewCustomerRepository()
+		paymentRepo := repository.NewPaymentRepository()
 		loanUsecase := usecase.NewLoanUsecase(loanRepo, customerRepo, paymentRepo)
 		paymentUsecase = usecase.NewPaymentUsecase(paymentRepo)
 
 		router = gin.Default()
+		router.Use(middleware.TransactionMiddleware(db))
+
 		routes.SetupLoanRoutes(router, loanUsecase)
 	})
 
@@ -110,7 +113,7 @@ var _ = ginkgo.Describe("MakePayment Endpoint", func() {
 
 		// Step 2: Run scheduler for one week ahead
 		currentDate := time.Now().AddDate(0, 0, 8)
-		err = paymentUsecase.RunDaily(currentDate)
+		err = paymentUsecase.RunDaily(db, currentDate)
 		Expect(err).ToNot(HaveOccurred())
 
 		// Step 3: Make a payment
@@ -150,11 +153,11 @@ var _ = ginkgo.Describe("MakePayment Endpoint", func() {
 
 		// Step 2: Run scheduler for two weeks ahead (simulate two weeks of payments)
 		currentDate := time.Now().AddDate(0, 0, 8) // 1st week
-		err = paymentUsecase.RunDaily(currentDate)
+		err = paymentUsecase.RunDaily(db, currentDate)
 		Expect(err).ToNot(HaveOccurred())
 
 		currentDate = time.Now().AddDate(0, 0, 15) // 2nd week
-		err = paymentUsecase.RunDaily(currentDate)
+		err = paymentUsecase.RunDaily(db, currentDate)
 		Expect(err).ToNot(HaveOccurred())
 
 		// Step 3: Make payment for the full outstanding balance (weeks 1, 2, and 3)

@@ -6,6 +6,7 @@ import (
 	"strconv"
 
 	"github.com/gin-gonic/gin"
+	"gorm.io/gorm"
 )
 
 type CustomerHandler struct {
@@ -26,8 +27,18 @@ func (h *CustomerHandler) IsDelinquent(c *gin.Context) {
 		return
 	}
 
+	// Extract the transaction from the context
+	tx, exists := c.Get("db_tx")
+	if !exists {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "transaction not found"})
+		return
+	}
+
+	// Cast the transaction to *gorm.DB
+	txDB := tx.(*gorm.DB)
+
 	// Call the use case to check for delinquency
-	isDelinquent, err := h.customerUsecase.IsDelinquent(uint(customerID))
+	isDelinquent, err := h.customerUsecase.IsDelinquent(txDB, uint(customerID))
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return

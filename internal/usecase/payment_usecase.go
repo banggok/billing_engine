@@ -4,10 +4,12 @@ import (
 	"billing_enginee/internal/repository"
 	"log"
 	"time"
+
+	"gorm.io/gorm"
 )
 
 type PaymentUsecase interface {
-	RunDaily(time.Time) error
+	RunDaily(tx *gorm.DB, tm time.Time) error
 }
 
 type paymentUsecase struct {
@@ -20,7 +22,7 @@ func NewPaymentUsecase(paymentRepo repository.PaymentRepository) PaymentUsecase 
 	}
 }
 
-func (pu *paymentUsecase) RunDaily(currentDate time.Time) error {
+func (pu *paymentUsecase) RunDaily(tx *gorm.DB, currentDate time.Time) error {
 	log.Println("Scheduler started: Checking for payments due in a week...")
 
 	// Safely truncate the current date, retaining the timezone and avoiding shifting
@@ -28,7 +30,7 @@ func (pu *paymentUsecase) RunDaily(currentDate time.Time) error {
 	nextWeek := currentDate.AddDate(0, 0, 7)
 	nextWeek = time.Date(nextWeek.Year(), nextWeek.Month(), nextWeek.Day(), 0, 0, 0, 0, nextWeek.Location())
 	// Fetch all payments that are scheduled, outstanding, or pending
-	payments, err := pu.paymentRepo.GetPaymentsDueBeforeDateWithStatus(nextWeek)
+	payments, err := pu.paymentRepo.GetPaymentsDueBeforeDateWithStatus(tx, nextWeek)
 	if err != nil {
 		log.Printf("Error fetching payments: %v\n", err)
 		return err
@@ -44,7 +46,7 @@ func (pu *paymentUsecase) RunDaily(currentDate time.Time) error {
 			payment.SetStatus("outstanding")
 		}
 
-		if err := pu.paymentRepo.UpdatePaymentStatus(payment); err != nil {
+		if err := pu.paymentRepo.UpdatePaymentStatus(tx, payment); err != nil {
 			log.Printf("Error updating payment status for payment ID %d: %v\n", payment.GetID(), err)
 			return err
 		}

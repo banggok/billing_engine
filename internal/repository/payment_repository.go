@@ -10,27 +10,25 @@ import (
 )
 
 type PaymentRepository interface {
-	GetPaymentsDueBeforeDateWithStatus(nextWeek time.Time) ([]*entity.Payment, error)
-	UpdatePaymentStatus(payment *entity.Payment) error
-	GetNextPayment(loanID uint) (*entity.Payment, error)
+	GetPaymentsDueBeforeDateWithStatus(tx *gorm.DB, nextWeek time.Time) ([]*entity.Payment, error)
+	UpdatePaymentStatus(tx *gorm.DB, payment *entity.Payment) error
+	GetNextPayment(tx *gorm.DB, loanID uint) (*entity.Payment, error)
+	SavePayments(tx *gorm.DB, payments []*entity.Payment) error
 }
 
 type paymentRepository struct {
-	db *gorm.DB
 }
 
-func NewPaymentRepository(db *gorm.DB) PaymentRepository {
-	return &paymentRepository{
-		db: db,
-	}
+func NewPaymentRepository() PaymentRepository {
+	return &paymentRepository{}
 }
 
 // Fetch payments due before nextWeek (ignoring time) with status 'scheduled' or 'outstanding'
-func (r *paymentRepository) GetPaymentsDueBeforeDateWithStatus(nextWeek time.Time) ([]*entity.Payment, error) {
+func (r *paymentRepository) GetPaymentsDueBeforeDateWithStatus(tx *gorm.DB, nextWeek time.Time) ([]*entity.Payment, error) {
 	var paymentModels []model.Payment
 
 	// Fetch payments where due_date < nextWeek (comparing dates only) and status is 'scheduled' or 'outstanding'
-	if err := r.db.Where("DATE(due_date) < ? AND status IN ?", nextWeek.Format("2006-01-02"), []string{"scheduled", "outstanding"}).
+	if err := tx.Where("DATE(due_date) < ? AND status IN ?", nextWeek.Format("2006-01-02"), []string{"scheduled", "outstanding"}).
 		Find(&paymentModels).Error; err != nil {
 		return nil, err
 	}
@@ -45,13 +43,13 @@ func (r *paymentRepository) GetPaymentsDueBeforeDateWithStatus(nextWeek time.Tim
 }
 
 // Update the status of the payment
-func (r *paymentRepository) UpdatePaymentStatus(payment *entity.Payment) error {
-	return r.db.Model(&model.Payment{}).Where("id = ?", payment.GetID()).Update("status", payment.Status()).Error
+func (r *paymentRepository) UpdatePaymentStatus(tx *gorm.DB, payment *entity.Payment) error {
+	return tx.Model(&model.Payment{}).Where("id = ?", payment.GetID()).Update("status", payment.Status()).Error
 }
 
-func (r *paymentRepository) GetNextPayment(loanID uint) (*entity.Payment, error) {
+func (r *paymentRepository) GetNextPayment(tx *gorm.DB, loanID uint) (*entity.Payment, error) {
 	var paymentModel model.Payment
-	err := r.db.Where("loan_id = ? AND status IN ?", loanID, []string{"scheduled", "outstanding"}).Order("week asc").First(&paymentModel).Error
+	err := tx.Where("loan_id = ? AND status IN ?", loanID, []string{"scheduled", "outstanding"}).Order("week asc").First(&paymentModel).Error
 
 	// Handle case when no record is found
 	if err != nil {
@@ -63,4 +61,24 @@ func (r *paymentRepository) GetNextPayment(loanID uint) (*entity.Payment, error)
 
 	// Convert model to entity and return
 	return entity.MakePayment(&paymentModel), nil
+}
+
+func (r *paymentRepository) SavePayments(tx *gorm.DB, payments []*entity.Payment) error {
+	// Convert entity.Payment to model.Payment
+	paymentModels := make([]model.Payment, len(payments))
+	for i, payment := range payments {
+		paymentModels[i] = *payment.ToModel()
+	}
+
+	// Save payments to the database
+	if err := tx.Create(&paymentModels).Error; err != nil {
+		return err
+	}
+
+	// Update entities with generated IDs
+	for i, paymentModel := range paymentModels {
+		payments[i].SetID(paymentModel.ID)
+	}
+
+	return nil
 }

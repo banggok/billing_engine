@@ -1,6 +1,7 @@
 package e2e_test
 
 import (
+	"billing_enginee/api/middleware"
 	"billing_enginee/api/routes"
 	"billing_enginee/internal/model"
 	"billing_enginee/internal/repository"
@@ -35,15 +36,17 @@ var _ = ginkgo.Describe("Is Delinquent Endpoint", func() {
 		Expect(err).ToNot(HaveOccurred())
 
 		// Initialize repositories and use cases
-		loanRepo := repository.NewLoanRepository(db)
-		customerRepo := repository.NewCustomerRepository(db)
-		paymentRepo := repository.NewPaymentRepository(db)
+		loanRepo := repository.NewLoanRepository()
+		customerRepo := repository.NewCustomerRepository()
+		paymentRepo := repository.NewPaymentRepository()
 		loanUsecase := usecase.NewLoanUsecase(loanRepo, customerRepo, paymentRepo)
 		paymentUsecase = usecase.NewPaymentUsecase(paymentRepo)
 		customerUsecase := usecase.NewCustomerUsecase(customerRepo)
 
 		// Setup router without running the server
 		router = gin.Default()
+		router.Use(middleware.TransactionMiddleware(db))
+
 		routes.SetupCustomerRoutes(router, customerUsecase)
 		routes.SetupLoanRoutes(router, loanUsecase)
 	})
@@ -136,7 +139,7 @@ var _ = ginkgo.Describe("Is Delinquent Endpoint", func() {
 
 		// Step 2: Run the scheduler once
 		currentDate := time.Now().AddDate(0, 0, 8) // Simulate 8 days later
-		err = paymentUsecase.RunDaily(currentDate)
+		err = paymentUsecase.RunDaily(db, currentDate)
 		Expect(err).ToNot(HaveOccurred())
 
 		// Step 3: Call the IsDelinquent endpoint
@@ -184,11 +187,11 @@ var _ = ginkgo.Describe("Is Delinquent Endpoint", func() {
 
 		// Step 2: Run the scheduler twice
 		currentDate := time.Now().AddDate(0, 0, 8) // Simulate 8 days later
-		err = paymentUsecase.RunDaily(currentDate)
+		err = paymentUsecase.RunDaily(db, currentDate)
 		Expect(err).ToNot(HaveOccurred())
 
 		currentDate = time.Now().AddDate(0, 0, 15) // Simulate 15 days later
-		err = paymentUsecase.RunDaily(currentDate)
+		err = paymentUsecase.RunDaily(db, currentDate)
 		Expect(err).ToNot(HaveOccurred())
 
 		// Step 3: Call the IsDelinquent endpoint
@@ -237,7 +240,7 @@ var _ = ginkgo.Describe("Is Delinquent Endpoint", func() {
 		// Step 2: Run the scheduler multiple times (simulate many overdue payments)
 		for i := 1; i <= 3; i++ {
 			currentDate := time.Now().AddDate(0, 0, 7*i) // Simulate multiple weeks later
-			err := paymentUsecase.RunDaily(currentDate)
+			err := paymentUsecase.RunDaily(db, currentDate)
 			Expect(err).ToNot(HaveOccurred())
 		}
 

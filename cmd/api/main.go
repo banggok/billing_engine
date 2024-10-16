@@ -1,6 +1,7 @@
 package main
 
 import (
+	"billing_enginee/api/middleware"
 	"billing_enginee/api/routes"
 	"billing_enginee/internal/repository"
 	"billing_enginee/internal/usecase"
@@ -16,6 +17,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/joho/godotenv"
 	log "github.com/sirupsen/logrus"
+	"gorm.io/gorm"
 )
 
 func main() {
@@ -49,10 +51,13 @@ func main() {
 		log.Println("Database connection closed gracefully")
 	}()
 
+	// Apply the transaction middleware globally
+	router.Use(middleware.TransactionMiddleware(db))
+
 	// Initialize repositories
-	loanRepo := repository.NewLoanRepository(db)
-	customerRepo := repository.NewCustomerRepository(db)
-	paymentRepo := repository.NewPaymentRepository(db)
+	loanRepo := repository.NewLoanRepository()
+	customerRepo := repository.NewCustomerRepository()
+	paymentRepo := repository.NewPaymentRepository()
 
 	// Initialize usecases
 	loanUsecase := usecase.NewLoanUsecase(loanRepo, customerRepo, paymentRepo)
@@ -60,7 +65,7 @@ func main() {
 	customerUsecase := usecase.NewCustomerUsecase(customerRepo)
 
 	// Start the daily scheduler
-	go startScheduler(paymentUsecase)
+	go startScheduler(db, paymentUsecase)
 
 	// Setup routes
 	routes.SetupCustomerRoutes(router, customerUsecase)
@@ -104,7 +109,7 @@ func main() {
 }
 
 // startScheduler runs the daily task at 00:00:00 UTC+7
-func startScheduler(paymentUsecase usecase.PaymentUsecase) {
+func startScheduler(tx *gorm.DB, paymentUsecase usecase.PaymentUsecase) {
 	// Timezone UTC+7
 	location, err := time.LoadLocation("Asia/Jakarta") // Set to Asia/Jakarta for UTC+7
 	if err != nil {
@@ -122,7 +127,7 @@ func startScheduler(paymentUsecase usecase.PaymentUsecase) {
 
 		// Run the scheduler now before the sleep
 		log.Println("Running scheduler...")
-		if err := paymentUsecase.RunDaily(time.Now()); err != nil {
+		if err := paymentUsecase.RunDaily(tx, time.Now()); err != nil {
 			log.Printf("Error running daily scheduler: %v\n", err)
 		}
 
