@@ -24,6 +24,9 @@ func main() {
 		log.Fatalf("Error loading .env file: %v", err)
 	}
 
+	// Initialize the Gin router
+	router := gin.Default()
+
 	// Read ReadHeaderTimeout from the .env file and convert to time.Duration
 	readHeaderTimeoutStr := os.Getenv("READ_HEADER_TIMEOUT")
 	readHeaderTimeout, err := strconv.Atoi(readHeaderTimeoutStr)
@@ -58,9 +61,6 @@ func main() {
 
 	// Start the daily scheduler
 	go startScheduler(paymentUsecase)
-
-	// Initialize Gin
-	router := gin.Default()
 
 	// Setup routes
 	routes.SetupCustomerRoutes(router, customerUsecase)

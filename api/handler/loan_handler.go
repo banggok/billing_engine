@@ -7,6 +7,7 @@ import (
 	"strconv"
 
 	"github.com/gin-gonic/gin"
+	"github.com/go-playground/validator/v10"
 )
 
 type LoanHandler struct {
@@ -22,9 +23,20 @@ func NewLoanHandler(loanUsecase usecase.LoanUsecase) *LoanHandler {
 func (h *LoanHandler) CreateLoan(c *gin.Context) {
 	var request loan_dto_handler.CreateLoanRequest
 
-	// Validate the request payload
+	// Bind JSON to struct
 	if err := c.ShouldBindJSON(&request); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	// Perform custom validation
+	validate := validator.New()
+	// Register custom validators
+	loan_dto_handler.RegisterCustomValidators(validate)
+
+	if err := validate.Struct(&request); err != nil {
+		errorMessages := request.CustomValidationMessages(err)
+		c.JSON(http.StatusBadRequest, gin.H{"errors": errorMessages})
 		return
 	}
 

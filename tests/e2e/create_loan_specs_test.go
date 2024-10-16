@@ -120,4 +120,34 @@ var _ = ginkgo.Describe("Create Loan Endpoint", func() {
 		Expect(payments[0].DueDate.Month()).To(Equal(expectedDueDate.Month()))
 		Expect(payments[0].DueDate.Day()).To(Equal(expectedDueDate.Day()))
 	})
+
+	// Test case: Validating required fields
+	ginkgo.It("should return validation errors for missing required fields", func() {
+		// Missing customer_id, name, email, amount, term_weeks, and rates
+		payload := map[string]interface{}{}
+		payloadJSON, _ := json.Marshal(payload)
+
+		req, _ := http.NewRequest("POST", "/api/v1/loans", bytes.NewBuffer(payloadJSON))
+		req.Header.Set("Content-Type", "application/json")
+		resp := httptest.NewRecorder()
+		router.ServeHTTP(resp, req)
+
+		// Verify response status and error messages
+		Expect(resp.Code).To(Equal(http.StatusBadRequest))
+		var response map[string]interface{}
+		err := json.Unmarshal(resp.Body.Bytes(), &response)
+		Expect(err).ToNot(HaveOccurred())
+
+		// Check if the errors field contains the expected validation error messages
+		errors := response["errors"].(map[string]interface{})
+
+		Expect(errors["customer_id"]).To(ContainSubstring("customer ID is required"))
+		Expect(errors["name"]).To(ContainSubstring("name is required"))
+		Expect(errors["email"]).To(ContainSubstring("email is required"))
+		Expect(errors["amount"]).To(ContainSubstring("amount is required"))
+		Expect(errors["term_weeks"]).To(ContainSubstring("term weeks is required"))
+		Expect(errors["rates"]).To(ContainSubstring("rates is required"))
+	})
+
+	// Test case: Validating incorrect formats
 })
