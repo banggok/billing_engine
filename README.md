@@ -85,9 +85,6 @@ make sonar
 ├── /cmd
 │   ├── /api            # Application entry point, main.go for starting the server
 │
-├── /config
-│   └── config.go       # Configuration loading logic (loads .env files, etc.)
-│
 ├── /internal
 │   ├── /entity         # Domain entities (Customer, Loan, Payment)
 │   ├── /model          # GORM models for database interaction
