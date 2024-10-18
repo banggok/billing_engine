@@ -17,6 +17,7 @@ import (
 	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
 	"github.com/joho/godotenv"
+	"github.com/robfig/cron/v3"
 	log "github.com/sirupsen/logrus"
 	"gorm.io/gorm"
 )
@@ -119,32 +120,21 @@ func main() {
 
 // startScheduler runs the daily task at 00:00:00 UTC+7
 func startScheduler(db *gorm.DB, paymentUsecase usecase.PaymentUsecase) {
-	// Timezone UTC+7
-	location, err := time.LoadLocation("Asia/Jakarta") // Set to Asia/Jakarta for UTC+7
-	if err != nil {
-		log.WithError(err).Fatal("Error loading location")
-	}
+	// Set up the cron scheduler
+	c := cron.New(cron.WithLocation(time.FixedZone("Asia/Jakarta", 7*60*60))) // UTC+7
 
-	for {
-		now := time.Now().In(location)
-		next := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, location) // 00:00:00 today in UTC+7
-
-		// If the current time has passed 00:00:00, schedule for the next day
-		if now.After(next) {
-			next = next.Add(24 * time.Hour)
-		}
-
-		// Run the scheduler now before the sleep
-		log.Info("Running scheduler...")
+	// Schedule the job to run daily at midnight (00:00)
+	_, err := c.AddFunc("0 0 * * *", func() {
+		log.Info("Running daily scheduler...")
 		if err := paymentUsecase.RunDaily(db, time.Now()); err != nil {
 			log.WithError(err).Error("Error running daily scheduler")
 		}
+	})
 
-		// Calculate duration until the next 00:00:00 UTC+7
-		durationUntilNextRun := next.Sub(now)
-		log.WithField("durationUntilNextRun", durationUntilNextRun).Info("Scheduler will next run")
-
-		// Sleep until the next 00:00:00 UTC+7
-		time.Sleep(durationUntilNextRun)
+	if err != nil {
+		log.WithError(err).Fatal("Failed to schedule daily task")
 	}
+
+	// Start the cron scheduler
+	c.Start()
 }
