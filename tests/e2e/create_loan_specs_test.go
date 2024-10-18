@@ -7,6 +7,7 @@ import (
 	"billing_enginee/internal/repository"
 	"billing_enginee/internal/usecase"
 	"billing_enginee/pkg"
+	"billing_enginee/tests/helpers"
 	"bytes"
 	"database/sql"
 	"encoding/json"
@@ -48,7 +49,9 @@ var _ = ginkgo.Describe("Create Loan Endpoint", func() {
 	// Tear down after each test
 	ginkgo.AfterEach(func() {
 		// Clean up the database by truncating tables
-		db.Exec("TRUNCATE TABLE loans, customers, payments RESTART IDENTITY CASCADE;")
+		// Use the helper function to truncate tables
+		err := helpers.TruncateTables(db, "loans", "customers", "payments")
+		Expect(err).ToNot(HaveOccurred(), "Failed to truncate tables before running tests")
 		sqlDB.Close()
 	})
 
