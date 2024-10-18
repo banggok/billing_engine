@@ -6,7 +6,6 @@ import (
 	"os"
 	"time"
 
-	"github.com/joho/godotenv"
 	log "github.com/sirupsen/logrus"
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
@@ -16,18 +15,9 @@ import (
 var DB *gorm.DB
 var err error
 
-func loadEnv(envFile string) {
-	if err := godotenv.Load(envFile); err != nil {
-		log.WithFields(log.Fields{
-			"envFile": envFile,
-			"error":   err,
-		}).Warn("Error loading environment file")
-	}
-}
-
 func InitDB() (*gorm.DB, *sql.DB, error) {
-	// Load environment variables if not already loaded
-	loadEnv(".env")
+	// Load environment variables centrally
+	LoadEnv(".env")
 
 	// Read database connection parameters from the environment
 	dsn := createDSN()
@@ -51,8 +41,8 @@ func InitDB() (*gorm.DB, *sql.DB, error) {
 }
 
 func InitTestDB() (*gorm.DB, *sql.DB, error) {
-	// Load the .env.test file for test environment
-	loadEnv("../../.env.test")
+	// Load the .env.test file for the test environment
+	LoadEnv("../../.env.test")
 
 	// Create DSN for the test database
 	dsn := createDSN()

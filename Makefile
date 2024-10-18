@@ -35,7 +35,7 @@ migrate: check-containers
 .PHONY: rollback
 rollback: check-containers
 	@echo "Rolling back migrations..."
-	soda rollback
+	soda migrate down
 
 # Run the E2E tests with Docker Compose and coverage for all folders
 .PHONY: test
