@@ -3,9 +3,11 @@ package repository
 import (
 	"billing_enginee/internal/entity"
 	"billing_enginee/internal/model"
-	"errors"
 	"time"
 
+	"github.com/pkg/errors" // Use the correct errors package
+
+	log "github.com/sirupsen/logrus"
 	"gorm.io/gorm"
 )
 
@@ -23,17 +25,15 @@ func NewPaymentRepository() PaymentRepository {
 	return &paymentRepository{}
 }
 
-// Fetch payments due before nextWeek (ignoring time) with status 'scheduled' or 'outstanding'
 func (r *paymentRepository) GetPaymentsDueBeforeDateWithStatus(tx *gorm.DB, nextWeek time.Time) ([]*entity.Payment, error) {
 	var paymentModels []model.Payment
 
-	// Fetch payments where due_date < nextWeek (comparing dates only) and status is 'scheduled' or 'outstanding'
 	if err := tx.Where("DATE(due_date) < ? AND status IN ?", nextWeek.Format("2006-01-02"), []string{"scheduled", "outstanding"}).
 		Find(&paymentModels).Error; err != nil {
-		return nil, err
+		log.WithError(err).Error("Failed to retrieve payments due before date")
+		return nil, errors.Wrap(err, "failed to retrieve payments due before date")
 	}
 
-	// Convert models to entities
 	payments := make([]*entity.Payment, len(paymentModels))
 	for i, model := range paymentModels {
 		payments[i] = entity.MakePayment(&model)
@@ -42,40 +42,49 @@ func (r *paymentRepository) GetPaymentsDueBeforeDateWithStatus(tx *gorm.DB, next
 	return payments, nil
 }
 
-// Update the status of the payment
 func (r *paymentRepository) UpdatePaymentStatus(tx *gorm.DB, payment *entity.Payment) error {
-	return tx.Model(&model.Payment{}).Where("id = ?", payment.GetID()).Update("status", payment.Status()).Error
+	if err := tx.Model(&model.Payment{}).Where("id = ?", payment.GetID()).Update("status", payment.Status()).Error; err != nil {
+		log.WithFields(log.Fields{
+			"paymentID": payment.GetID(),
+			"status":    payment.Status(),
+			"error":     err,
+		}).Error("Failed to update payment status")
+		return errors.Wrap(err, "failed to update payment status")
+	}
+
+	return nil
 }
 
 func (r *paymentRepository) GetNextPayment(tx *gorm.DB, loanID uint) (*entity.Payment, error) {
 	var paymentModel model.Payment
 	err := tx.Where("loan_id = ? AND status IN ?", loanID, []string{"scheduled", "outstanding"}).Order("week asc").First(&paymentModel).Error
 
-	// Handle case when no record is found
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
-			return nil, nil // No next payment found
+			log.WithField("loanID", loanID).Info("No next payment found")
+			return nil, nil
 		}
-		return nil, err // Return the actual error if it's not ErrRecordNotFound
+		log.WithFields(log.Fields{
+			"loanID": loanID,
+			"error":  err,
+		}).Error("Failed to retrieve next payment")
+		return nil, errors.Wrap(err, "failed to retrieve next payment")
 	}
 
-	// Convert model to entity and return
 	return entity.MakePayment(&paymentModel), nil
 }
 
 func (r *paymentRepository) SavePayments(tx *gorm.DB, payments []*entity.Payment) error {
-	// Convert entity.Payment to model.Payment
 	paymentModels := make([]model.Payment, len(payments))
 	for i, payment := range payments {
 		paymentModels[i] = *payment.ToModel()
 	}
 
-	// Save payments to the database
 	if err := tx.Create(&paymentModels).Error; err != nil {
-		return err
+		log.WithError(err).Error("Failed to save payments")
+		return errors.Wrap(err, "failed to save payments")
 	}
 
-	// Update entities with generated IDs
 	for i, paymentModel := range paymentModels {
 		payments[i].SetID(paymentModel.ID)
 	}

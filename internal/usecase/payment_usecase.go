@@ -2,9 +2,10 @@ package usecase
 
 import (
 	"billing_enginee/internal/repository"
-	"log"
+	"errors"
 	"time"
 
+	"github.com/sirupsen/logrus"
 	"gorm.io/gorm"
 )
 
@@ -23,17 +24,18 @@ func NewPaymentUsecase(paymentRepo repository.PaymentRepository) PaymentUsecase 
 }
 
 func (pu *paymentUsecase) RunDaily(tx *gorm.DB, currentDate time.Time) error {
-	log.Println("Scheduler started: Checking for payments due in a week...")
+	logrus.Info("Scheduler started: Checking for payments due in a week...")
 
 	// Safely truncate the current date, retaining the timezone and avoiding shifting
 	today := time.Date(currentDate.Year(), currentDate.Month(), currentDate.Day(), 0, 0, 0, 0, currentDate.Location())
 	nextWeek := currentDate.AddDate(0, 0, 7)
 	nextWeek = time.Date(nextWeek.Year(), nextWeek.Month(), nextWeek.Day(), 0, 0, 0, 0, nextWeek.Location())
+
 	// Fetch all payments that are scheduled, outstanding, or pending
 	payments, err := pu.paymentRepo.GetPaymentsDueBeforeDateWithStatus(tx, nextWeek)
 	if err != nil {
-		log.Printf("Error fetching payments: %v\n", err)
-		return err
+		logrus.WithError(err).Error("Error fetching payments")
+		return errors.New("error fetching payments: " + err.Error())
 	}
 
 	// Update the payment statuses
@@ -47,11 +49,14 @@ func (pu *paymentUsecase) RunDaily(tx *gorm.DB, currentDate time.Time) error {
 		}
 
 		if err := pu.paymentRepo.UpdatePaymentStatus(tx, payment); err != nil {
-			log.Printf("Error updating payment status for payment ID %d: %v\n", payment.GetID(), err)
-			return err
+			logrus.WithFields(logrus.Fields{
+				"paymentID": payment.GetID(),
+				"error":     err,
+			}).Error("Error updating payment status")
+			return errors.New("failed to update payment status: " + err.Error())
 		}
 	}
 
-	log.Printf("Scheduler completed: Processed %d payments.\n", len(payments))
+	logrus.Infof("Scheduler completed: Processed %d payments.", len(payments))
 	return nil
 }

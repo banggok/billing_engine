@@ -4,46 +4,52 @@ import (
 	"net/http"
 
 	"github.com/gin-gonic/gin"
+	log "github.com/sirupsen/logrus"
 	"gorm.io/gorm"
 )
 
-// TransactionMiddleware is a middleware that wraps each request in a serializable database transaction.
 func TransactionMiddleware(db *gorm.DB) gin.HandlerFunc {
 	return func(c *gin.Context) {
-		// Begin a GORM transaction
+		// Start a new transaction
 		tx := db.Begin()
-
-		// Check for any errors in beginning the transaction
 		if tx.Error != nil {
-			c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{
-				"error": "could not start transaction",
-			})
+			log.WithFields(log.Fields{
+				"error": tx.Error,
+			}).Error("Failed to start transaction")
+			c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{"error": "Failed to start transaction"})
 			return
 		}
 
-		// Attach the transaction to the context so it can be used in the handlers
+		log.Info("Transaction started")
+		// Store the transaction in the context
 		c.Set("db_tx", tx)
 
-		// Proceed with the request
+		// Process the request
 		c.Next()
 
-		// After the request is completed, decide to commit or rollback the transaction
+		// Check if there are any errors during the request
 		if len(c.Errors) > 0 {
-			// If there are any errors, rollback the transaction
+			// Rollback the transaction if any errors occurred
 			if err := tx.Rollback().Error; err != nil {
-				c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{
-					"error": "failed to rollback transaction",
-				})
+				log.WithFields(log.Fields{
+					"error": err,
+				}).Error("Failed to rollback transaction")
+				c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{"error": "Failed to rollback transaction"})
 				return
 			}
-		} else {
-			// Otherwise, commit the transaction
-			if err := tx.Commit().Error; err != nil {
-				c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{
-					"error": "failed to commit transaction",
-				})
-				return
-			}
+			log.Info("Transaction rolled back due to errors")
+			return
 		}
+
+		// Commit the transaction if no errors occurred
+		if err := tx.Commit().Error; err != nil {
+			log.WithFields(log.Fields{
+				"error": err,
+			}).Error("Failed to commit transaction")
+			c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{"error": "Failed to commit transaction"})
+			return
+		}
+
+		log.Info("Transaction committed successfully")
 	}
 }

@@ -3,6 +3,8 @@ package usecase
 import (
 	"billing_enginee/internal/repository"
 
+	"github.com/pkg/errors" // Use the correct package for error wrapping
+	log "github.com/sirupsen/logrus"
 	"gorm.io/gorm"
 )
 
@@ -21,12 +23,18 @@ func NewCustomerUsecase(customerRepo repository.CustomerRepository) CustomerUsec
 }
 
 func (u *customerUsecase) IsDelinquent(tx *gorm.DB, customerID uint) (bool, error) {
-	// Fetch customer by ID
 	customer, err := u.customerRepo.GetCustomerByID(tx, customerID)
 	if err != nil {
-		return false, err
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			log.WithField("customerID", customerID).Info("Customer not found")
+			return false, nil
+		}
+		log.WithFields(log.Fields{
+			"customerID": customerID,
+			"error":      err,
+		}).Error("Failed to retrieve customer for delinquency check")
+		return false, errors.Wrap(err, "failed to retrieve customer for delinquency check")
 	}
 
-	// Use the entity method to check if customer is delinquent
 	return customer.IsDelinquent(), nil
 }

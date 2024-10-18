@@ -3,9 +3,10 @@ package usecase
 import (
 	"billing_enginee/internal/entity"
 	"billing_enginee/internal/repository"
-	"errors"
 	"time"
 
+	"github.com/pkg/errors" // Import for error wrapping
+	log "github.com/sirupsen/logrus"
 	"gorm.io/gorm"
 )
 
@@ -50,49 +51,55 @@ type LoanResponse struct {
 }
 
 func (u *loanUsecase) CreateLoan(tx *gorm.DB, customerID uint, name string, email string, amount float64, termWeeks int, rates float64) (*LoanResponse, error) {
-	// Check if the customer exists
 	customer, err := u.customerRepo.GetCustomerByID(tx, customerID)
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
-			// Create and save customer if not found
 			customer = entity.CreateCustomer(customerID, name, email)
-			if err := u.customerRepo.SaveCustomer(tx, customer); err != nil {
-				return nil, err
+			if saveErr := u.customerRepo.SaveCustomer(tx, customer); saveErr != nil {
+				log.WithFields(log.Fields{
+					"customer": customer,
+					"error":    saveErr,
+				}).Error("Failed to save customer during loan creation")
+				return nil, errors.Wrap(saveErr, "failed to save customer during loan creation")
 			}
 		} else {
-			return nil, err
+			log.WithFields(log.Fields{
+				"customerID": customerID,
+				"error":      err,
+			}).Error("Failed to retrieve customer during loan creation")
+			return nil, errors.Wrap(err, "failed to retrieve customer during loan creation")
 		}
 	}
 
-	// Create loan entity
 	loan := entity.CreateLoan(customer.GetID(), amount, termWeeks, rates)
 
-	// Save loan to the repository
 	if err := u.loanRepo.SaveLoan(tx, loan); err != nil {
-		return nil, err
+		log.WithFields(log.Fields{
+			"loan":  loan,
+			"error": err,
+		}).Error("Failed to save loan")
+		return nil, errors.Wrap(err, "failed to save loan")
 	}
 
-	// Calculate payment amount
 	paymentAmount := loan.TotalAmount() / float64(termWeeks)
-
-	// Generate payments
 	payments := []*entity.Payment{}
 	for week := 1; week <= termWeeks; week++ {
 		status := "scheduled"
 		if week == 1 {
 			status = "outstanding"
 		}
-
 		dueDate := time.Now().AddDate(0, 0, 7*week)
 		payments = append(payments, entity.CreatePayment(loan.GetID(), week, paymentAmount, dueDate, status))
 	}
 
-	// Save payments to the repository
 	if err := u.paymentRepo.SavePayments(tx, payments); err != nil {
-		return nil, err
+		log.WithFields(log.Fields{
+			"payments": payments,
+			"error":    err,
+		}).Error("Failed to save payments")
+		return nil, errors.Wrap(err, "failed to save payments")
 	}
 
-	// Prepare response
 	response := &LoanResponse{
 		LoanID:            loan.GetID(),
 		TotalAmount:       loan.TotalAmount(),
@@ -105,27 +112,28 @@ func (u *loanUsecase) CreateLoan(tx *gorm.DB, customerID uint, name string, emai
 }
 
 func (u *loanUsecase) GetOutstanding(tx *gorm.DB, loanID uint) (*OutstandingResponse, error) {
-	// Fetch the loan with outstanding payments from the repository
 	loan, err := u.loanRepo.GetOutstandingPayments(tx, loanID)
 	if err != nil {
-		return nil, err
+		log.WithFields(log.Fields{
+			"loanID": loanID,
+			"error":  err,
+		}).Error("Failed to get outstanding payments for loan")
+		return nil, errors.Wrap(err, "failed to get outstanding payments for loan")
 	}
 
-	// Get payments from the loan
 	payments := loan.GetPayments()
 
 	if len(*payments) == 0 {
-		return nil, nil // No outstanding payments
+		log.WithField("loanID", loanID).Info("No outstanding payments found")
+		return nil, nil
 	}
 
-	// Initialize variables for pending, outstanding, and total outstanding amounts
 	var pendingPayments []entity.Payment
 	var outstandingPayment *entity.Payment
 	var totalOutstanding float64
 	var latestDueDate time.Time
 	var latestWeek int
 
-	// Iterate through payments to classify pending and outstanding payments
 	for _, payment := range *payments {
 		if payment.Status() == "pending" {
 			pendingPayments = append(pendingPayments, payment)
@@ -136,19 +144,16 @@ func (u *loanUsecase) GetOutstanding(tx *gorm.DB, loanID uint) (*OutstandingResp
 
 	switch {
 	case len(pendingPayments) == 0 && outstandingPayment != nil:
-		// Case 1: Only 1 outstanding payment
 		totalOutstanding = outstandingPayment.Amount()
 		latestDueDate = outstandingPayment.DueDate()
 		latestWeek = outstandingPayment.Week()
 
 	case len(pendingPayments) == 1 && outstandingPayment != nil:
-		// Case 2: 1 pending payment and 1 outstanding payment
 		totalOutstanding = pendingPayments[0].Amount()
 		latestDueDate = pendingPayments[0].DueDate()
 		latestWeek = pendingPayments[0].Week()
 
 	case len(pendingPayments) >= 2 && outstandingPayment != nil:
-		// Case 3: 2 or more pending payments and 1 outstanding payment
 		for _, pending := range pendingPayments {
 			totalOutstanding += pending.Amount()
 		}
@@ -157,42 +162,44 @@ func (u *loanUsecase) GetOutstanding(tx *gorm.DB, loanID uint) (*OutstandingResp
 		latestWeek = outstandingPayment.Week()
 	}
 
-	// Prepare the response with total amount and outstanding details
 	response := &OutstandingResponse{
 		LoanID:            loan.GetID(),
 		TotalAmount:       loan.TotalAmount(),
 		OutstandingAmount: totalOutstanding,
 		DueDate:           latestDueDate,
-		WeeksOutstanding:  latestWeek, // Week of the latest outstanding payment
+		WeeksOutstanding:  latestWeek,
 	}
 
 	return response, nil
 }
 
 func (u *loanUsecase) MakePayment(tx *gorm.DB, loanID uint, amount float64) error {
-	// Retrieve loan along with outstanding and pending payments by loan number
 	loan, err := u.loanRepo.GetOutstandingPayments(tx, loanID)
 	if err != nil {
-		return err
+		log.WithFields(log.Fields{
+			"loanID": loanID,
+			"error":  err,
+		}).Error("Failed to retrieve loan for making payment")
+		return errors.Wrap(err, "failed to retrieve loan for making payment")
 	}
 
 	payments := loan.GetPayments()
 
-	// Define a small epsilon value for floating-point comparison
-	// Validate the amount provided with tolerance for floating-point comparison
 	if err := loan.ValidateAmount(amount); err != nil {
-		return err
+		log.WithFields(log.Fields{
+			"loanID": loanID,
+			"amount": amount,
+			"error":  err,
+		}).Error("Payment amount does not match outstanding balance")
+		return errors.Wrap(err, "payment amount does not match outstanding balance")
 	}
 
-	// Loop through payments and mark them as 'paid' until the amount runs out
 	if err := u.updatePaid(tx, payments, amount); err != nil {
-		return err
+		return errors.Wrap(err, "failed to update payments to 'paid'")
 	}
 
-	// Update the next scheduled payment to 'outstanding'
-	// If no more payments are due, mark the loan as "closed"
 	if err := u.updateNextPayment(tx, loan); err != nil {
-		return err
+		return errors.Wrap(err, "failed to update next payment or close loan")
 	}
 
 	return nil
@@ -200,20 +207,35 @@ func (u *loanUsecase) MakePayment(tx *gorm.DB, loanID uint, amount float64) erro
 
 func (u *loanUsecase) updateNextPayment(tx *gorm.DB, loan *entity.Loan) error {
 	nextPayment, err := u.paymentRepo.GetNextPayment(tx, loan.GetID())
-	if err == nil && nextPayment == nil {
-
-		loan.SetStatus("close")
-		if err := u.loanRepo.UpdateLoanStatus(tx, loan); err != nil {
-			return err
-		} else {
-			return nil
-		}
+	if err != nil {
+		log.WithFields(log.Fields{
+			"loanID": loan.GetID(),
+			"error":  err,
+		}).Error("Failed to retrieve next payment for updating")
+		return errors.Wrap(err, "failed to retrieve next payment")
 	}
 
-	if err == nil && nextPayment.Status() == "scheduled" {
+	if nextPayment == nil {
+		loan.SetStatus("close")
+		if err := u.loanRepo.UpdateLoanStatus(tx, loan); err != nil {
+			log.WithFields(log.Fields{
+				"loanID": loan.GetID(),
+				"error":  err,
+			}).Error("Failed to update loan status to closed")
+			return errors.Wrap(err, "failed to update loan status to closed")
+		}
+		return nil
+	}
+
+	if nextPayment.Status() == "scheduled" {
 		nextPayment.SetStatus("outstanding")
 		if err := u.paymentRepo.UpdatePaymentStatus(tx, nextPayment); err != nil {
-			return err
+			log.WithFields(log.Fields{
+				"paymentID": nextPayment.GetID(),
+				"loanID":    loan.GetID(),
+				"error":     err,
+			}).Error("Failed to update next payment to outstanding")
+			return errors.Wrap(err, "failed to update next payment to outstanding")
 		}
 	}
 	return nil
@@ -225,7 +247,12 @@ func (u *loanUsecase) updatePaid(tx *gorm.DB, payments *[]entity.Payment, amount
 			payment.SetStatus("paid")
 			amount -= payment.Amount()
 			if err := u.paymentRepo.UpdatePaymentStatus(tx, &payment); err != nil {
-				return err
+				log.WithFields(log.Fields{
+					"paymentID": payment.GetID(),
+					"amount":    payment.Amount(),
+					"error":     err,
+				}).Error("Failed to update payment to paid")
+				return errors.Wrap(err, "failed to update payment to paid")
 			}
 		} else {
 			break

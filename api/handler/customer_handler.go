@@ -6,6 +6,7 @@ import (
 	"strconv"
 
 	"github.com/gin-gonic/gin"
+	log "github.com/sirupsen/logrus"
 	"gorm.io/gorm"
 )
 
@@ -23,27 +24,43 @@ func (h *CustomerHandler) IsDelinquent(c *gin.Context) {
 	customerIDParam := c.Param("customer_id")
 	customerID, err := strconv.ParseUint(customerIDParam, 10, 32)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid customer ID"})
+		log.WithFields(log.Fields{
+			"customerIDParam": customerIDParam,
+			"error":           err,
+		}).Error("Invalid customer ID format")
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid customer ID format"})
 		return
 	}
 
-	// Extract the transaction from the context
+	tx, err := h.getTransactionFromMiddleware(c)
+	if err != nil {
+		log.WithFields(log.Fields{
+			"customerID": customerID,
+			"error":      err,
+		}).Error("Failed to retrieve transaction")
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to retrieve transaction"})
+		return
+	}
+
+	isDelinquent, err := h.customerUsecase.IsDelinquent(tx, uint(customerID))
+	if err != nil {
+		log.WithFields(log.Fields{
+			"customerID": customerID,
+			"error":      err,
+		}).Error("Failed to check if customer is delinquent")
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to check delinquency status"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"is_delinquent": isDelinquent})
+}
+
+// Helper function to extract transaction from context
+func (h *CustomerHandler) getTransactionFromMiddleware(c *gin.Context) (*gorm.DB, error) {
 	tx, exists := c.Get("db_tx")
 	if !exists {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "transaction not found"})
-		return
+		log.Error("Transaction not found in context")
+		return nil, gorm.ErrInvalidTransaction
 	}
-
-	// Cast the transaction to *gorm.DB
-	txDB := tx.(*gorm.DB)
-
-	// Call the use case to check for delinquency
-	isDelinquent, err := h.customerUsecase.IsDelinquent(txDB, uint(customerID))
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-		return
-	}
-
-	// Return the result
-	c.JSON(http.StatusOK, gin.H{"is_delinquent": isDelinquent})
+	return tx.(*gorm.DB), nil
 }

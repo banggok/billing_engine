@@ -5,6 +5,8 @@ import (
 	"errors"
 	"math"
 	"time"
+
+	logrus "github.com/sirupsen/logrus"
 )
 
 type Loan struct {
@@ -23,6 +25,13 @@ type Loan struct {
 // CreateLoan is used to initialize a new Loan entity
 func CreateLoan(customerID uint, amount float64, termWeeks int, rates float64) *Loan {
 	totalAmount := amount + (amount * rates / 100)
+	logrus.WithFields(logrus.Fields{
+		"customerID":  customerID,
+		"amount":      amount,
+		"termWeeks":   termWeeks,
+		"rates":       rates,
+		"totalAmount": totalAmount,
+	}).Info("Creating new loan")
 	return &Loan{
 		customerID:  customerID,
 		amount:      amount,
@@ -37,6 +46,11 @@ func CreateLoan(customerID uint, amount float64, termWeeks int, rates float64) *
 // MakeLoan converts a model.Loan to an entity.Loan
 func MakeLoan(m *model.Loan) (*Loan, error) {
 	if m.Amount <= 0 || m.Rates < 0 || m.TermWeeks <= 0 {
+		logrus.WithFields(logrus.Fields{
+			"amount":    m.Amount,
+			"rates":     m.Rates,
+			"termWeeks": m.TermWeeks,
+		}).Error("Invalid loan data for MakeLoan")
 		return nil, errors.New("invalid loan data: amount, rates, and termWeeks must be positive values")
 	}
 
@@ -52,19 +66,21 @@ func MakeLoan(m *model.Loan) (*Loan, error) {
 		updatedAt:   m.UpdatedAt,
 	}
 
-	// If payments are provided in the model, convert them to entity.Payments and attach to the loan
 	if m.Payments != nil && len(*m.Payments) > 0 {
-		loan.payments = &[]Payment{} // Initialize an empty slice of payments
+		logrus.WithFields(logrus.Fields{
+			"loanID":   m.ID,
+			"payments": len(*m.Payments),
+		}).Info("Converting model payments to entity payments")
 
-		// Convert model.Payments to entity.Payments
+		loan.payments = &[]Payment{}
 		for _, paymentModel := range *m.Payments {
 			paymentEntity := MakePayment(&paymentModel)
 			*loan.payments = append(*loan.payments, *paymentEntity)
 		}
 
-		// Perform validation to ensure the loan has only one outstanding payment
 		if err := loan.HasOneOutstandingPayment(); err != nil {
-			return nil, err // Return an error if more than one outstanding payment is found
+			logrus.WithField("loanID", m.ID).Error("Loan has more than one outstanding payment")
+			return nil, err
 		}
 	}
 
@@ -80,6 +96,10 @@ func (l *Loan) ToModel() *model.Loan {
 		}
 	}
 
+	logrus.WithFields(logrus.Fields{
+		"loanID":   l.id,
+		"payments": len(paymentModels),
+	}).Info("Converting loan entity to model")
 	return &model.Loan{
 		ID:          l.id,
 		CustomerID:  l.customerID,
@@ -90,7 +110,7 @@ func (l *Loan) ToModel() *model.Loan {
 		Rates:       l.rates,
 		CreatedAt:   l.createdAt,
 		UpdatedAt:   l.updatedAt,
-		Payments:    &paymentModels, // Attach converted payments
+		Payments:    &paymentModels,
 	}
 }
 
@@ -106,6 +126,7 @@ func (l *Loan) HasOneOutstandingPayment() error {
 	}
 
 	if outstandingCount > 1 {
+		logrus.WithField("loanID", l.id).Error("More than one outstanding payment found")
 		return errors.New("more than one outstanding payment found, this is a bug in the system")
 	}
 	return nil
@@ -113,11 +134,16 @@ func (l *Loan) HasOneOutstandingPayment() error {
 
 func (l *Loan) ValidateAmount(amount float64) error {
 	if l.GetTotalOutstandingAmount() == nil {
-		return errors.New("payement can not be empty")
+		logrus.WithField("loanID", l.id).Error("No payments found for validation")
+		return errors.New("payment cannot be empty")
 	}
 	const epsilon = 0.00001
 	totalOA := l.GetTotalOutstandingAmount()
 	if math.Abs(*totalOA-amount) > epsilon {
+		logrus.WithFields(logrus.Fields{
+			"expected": *totalOA,
+			"provided": amount,
+		}).Error("Payment amount does not match outstanding balance")
 		return errors.New("payment amount does not match outstanding balance")
 	}
 	return nil
@@ -138,20 +164,23 @@ func (l *Loan) GetTotalOutstandingAmount() *float64 {
 		}
 		switch {
 		case len(pendingPayments) == 0 && outstandingPayment != nil:
-
 			totalOutstanding = outstandingPayment.Amount()
 
 		case len(pendingPayments) == 1 && outstandingPayment != nil:
-
 			totalOutstanding = pendingPayments[0].Amount()
 
 		case len(pendingPayments) >= 2 && outstandingPayment != nil:
-
 			for _, pending := range pendingPayments {
 				totalOutstanding += pending.Amount()
 			}
 			totalOutstanding += outstandingPayment.Amount()
 		}
+		logrus.WithFields(logrus.Fields{
+			"loanID":            l.id,
+			"totalOutstanding":  totalOutstanding,
+			"pendingPayments":   len(pendingPayments),
+			"outstandingExists": outstandingPayment != nil,
+		}).Info("Calculated total outstanding amount")
 		return &totalOutstanding
 	}
 	return nil
@@ -159,6 +188,10 @@ func (l *Loan) GetTotalOutstandingAmount() *float64 {
 
 // SetID sets the loan ID
 func (l *Loan) SetID(id uint) {
+	logrus.WithFields(logrus.Fields{
+		"oldID": l.id,
+		"newID": id,
+	}).Info("Setting loan ID")
 	l.id = id
 }
 
@@ -174,6 +207,10 @@ func (l *Loan) TotalAmount() float64 {
 
 // SetPayments sets the payments for the loan
 func (l *Loan) SetPayments(payments *[]Payment) {
+	logrus.WithFields(logrus.Fields{
+		"loanID":   l.id,
+		"payments": len(*payments),
+	}).Info("Setting payments for loan")
 	l.payments = payments
 }
 
@@ -184,6 +221,10 @@ func (l *Loan) GetPayments() *[]Payment {
 
 // SetStatus sets the status of the loan
 func (l *Loan) SetStatus(status string) {
+	logrus.WithFields(logrus.Fields{
+		"loanID": l.id,
+		"status": status,
+	}).Info("Setting loan status")
 	l.status = status
 }
 
