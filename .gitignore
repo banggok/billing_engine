@@ -1,5 +1,24 @@
-coverage.out
-coverage.html
+# Environment files
 .env
 .env.test
+
+# Output coverage reports
+coverage.out
+coverage.html
+
+# SonarQube scanner work
+.scannerwork/
 .scannerwork/report-task.txt
+
+# IDE-specific
+.vscode/
+.idea/
+
+# OS-specific
+.DS_Store
+Thumbs.db
+
+# Build artifacts
+bin/
+dist/
+*.out
