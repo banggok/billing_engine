@@ -35,6 +35,9 @@ func main() {
 	// Initialize the Gin router
 	router := gin.Default()
 
+	// Initialize custom validators globally
+	pkg.InitValidators()
+
 	// CORS configuration
 	router.Use(cors.New(cors.Config{
 		AllowOrigins:     []string{"http://localhost:5173"}, // Allow frontend origin

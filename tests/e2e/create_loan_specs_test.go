@@ -1,12 +1,7 @@
 package e2e_test
 
 import (
-	"billing_enginee/api/middleware"
-	"billing_enginee/api/routes"
 	"billing_enginee/internal/model"
-	"billing_enginee/internal/repository"
-	"billing_enginee/internal/usecase"
-	"billing_enginee/pkg"
 	"billing_enginee/tests/helpers"
 	"bytes"
 	"database/sql"
@@ -28,24 +23,12 @@ var _ = ginkgo.Describe("Create Loan Endpoint", func() {
 
 	// Set up the test environment before each test
 	ginkgo.BeforeEach(func() {
-		// Initialize the test database
-		db, sqlDB, _ = pkg.InitTestDB() // Assume this initializes a test DB
-		// Migrate the database schema for testing
-		err := db.AutoMigrate(&model.Customer{}, &model.Loan{}, &model.Payment{})
-		Expect(err).ToNot(HaveOccurred())
-
-		// Initialize repositories and use cases
-		loanRepo := repository.NewLoanRepository()
-		customerRepo := repository.NewCustomerRepository()
-		paymentRepo := repository.NewPaymentRepository()
-		loanUsecase := usecase.NewLoanUsecase(loanRepo, customerRepo, paymentRepo)
-
-		// Setup router without running the server
-		router = gin.Default()
-		router.Use(middleware.TransactionMiddleware(db))
-		routes.SetupLoanRoutes(router, loanUsecase)
+		// Use the helper to initialize the environment
+		env := helpers.InitializeTestEnvironment()
+		db = env.DB
+		router = env.Router
+		sqlDB = env.SQLDB
 	})
-
 	// Tear down after each test
 	ginkgo.AfterEach(func() {
 		// Clean up the database by truncating tables

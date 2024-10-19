@@ -1,12 +1,8 @@
 package e2e_test
 
 import (
-	"billing_enginee/api/middleware"
-	"billing_enginee/api/routes"
 	"billing_enginee/internal/model"
-	"billing_enginee/internal/repository"
 	"billing_enginee/internal/usecase"
-	"billing_enginee/pkg"
 	"billing_enginee/tests/helpers"
 	"bytes"
 	"database/sql"
@@ -24,37 +20,26 @@ import (
 
 var _ = ginkgo.Describe("MakePayment Endpoint", func() {
 	var db *gorm.DB
-	var sql *sql.DB
+	var sqlDB *sql.DB
 	var router *gin.Engine
 	var paymentUsecase usecase.PaymentUsecase
 
 	// Set up the test environment before each test
 	ginkgo.BeforeEach(func() {
-		// Initialize the test database
-		db, sql, _ = pkg.InitTestDB()
-		err := db.AutoMigrate(&model.Customer{}, &model.Loan{}, &model.Payment{})
-		Expect(err).ToNot(HaveOccurred())
-
-		// Initialize repositories and use cases
-		loanRepo := repository.NewLoanRepository()
-		customerRepo := repository.NewCustomerRepository()
-		paymentRepo := repository.NewPaymentRepository()
-		loanUsecase := usecase.NewLoanUsecase(loanRepo, customerRepo, paymentRepo)
-		paymentUsecase = usecase.NewPaymentUsecase(paymentRepo)
-
-		router = gin.Default()
-		router.Use(middleware.TransactionMiddleware(db))
-
-		routes.SetupLoanRoutes(router, loanUsecase)
+		// Use the helper to initialize the environment
+		env := helpers.InitializeTestEnvironment()
+		db = env.DB
+		sqlDB = env.SQLDB
+		router = env.Router
+		paymentUsecase = env.PaymentUsecase
 	})
-
 	// Tear down after each test
 	ginkgo.AfterEach(func() {
 		// Clean up the database by truncating tables
 		// Use the helper function to truncate tables
 		err := helpers.TruncateTables(db, "loans", "customers", "payments")
 		Expect(err).ToNot(HaveOccurred(), "Failed to truncate tables before running tests")
-		sql.Close()
+		sqlDB.Close()
 	})
 
 	ginkgo.It("should make payment and update status to paid for week 1 and outstanding for week 2", func() {

@@ -25,20 +25,16 @@ func NewLoanHandler(loanUsecase usecase.LoanUsecase) *LoanHandler {
 func (h *LoanHandler) CreateLoan(c *gin.Context) {
 	var request loan_dto_handler.CreateLoanRequest
 
-	// Bind JSON to struct
+	// Bind and validate JSON request
 	if err := c.ShouldBindJSON(&request); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
-		return
-	}
-
-	// Perform custom validation
-	validate := validator.New()
-	// Register custom validators
-	loan_dto_handler.RegisterCustomValidators(validate)
-
-	if err := validate.Struct(&request); err != nil {
-		errorMessages := request.CustomValidationMessages(err)
-		c.JSON(http.StatusBadRequest, gin.H{"errors": errorMessages})
+		// Check if it's a validation error
+		if validationErrors, ok := err.(validator.ValidationErrors); ok {
+			errorMessages := request.CustomValidationMessages(validationErrors)
+			c.JSON(http.StatusBadRequest, gin.H{"errors": errorMessages})
+		} else {
+			// General error if it's not a validation error
+			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		}
 		return
 	}
 
@@ -107,7 +103,6 @@ func (h *LoanHandler) GetOutstanding(c *gin.Context) {
 }
 
 func (h *LoanHandler) MakePayment(c *gin.Context) {
-
 	loanIDParam := c.Param("loan_id")
 	loanID, err := strconv.ParseUint(loanIDParam, 10, 32)
 	if err != nil {
