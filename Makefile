@@ -84,3 +84,8 @@ all: migrate run test coverage sonar
 stop:
 	@echo "Stopping Docker containers..."
 	docker-compose down
+
+# Start the server locally, ensuring migrations are run first
+.PHONY: start-local
+start-local: migrate
+	$(GOCMD) run cmd/api/main.go
