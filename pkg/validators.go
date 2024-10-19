@@ -8,16 +8,22 @@ import (
 
 	"github.com/gin-gonic/gin/binding"
 	"github.com/go-playground/validator/v10"
+	log "github.com/sirupsen/logrus"
 )
 
 // Initialize all custom validators
 func InitValidators() {
 	if v, ok := binding.Validator.Engine().(*validator.Validate); ok {
-		// Register custom validators globally
-		v.RegisterValidation("money", validateMoney)
-		v.RegisterValidation("percentage", validatePercentage)
-		v.RegisterValidation("alpha_space", validateAlphaSpace)
-		// Add any other custom validations you need
+		// Register custom validators globally and check for errors
+		if err := v.RegisterValidation("money", validateMoney); err != nil {
+			log.WithError(err).Error("Failed to register custom validator: money")
+		}
+		if err := v.RegisterValidation("percentage", validatePercentage); err != nil {
+			log.WithError(err).Error("Failed to register custom validator: percentage")
+		}
+		if err := v.RegisterValidation("alpha_space", validateAlphaSpace); err != nil {
+			log.WithError(err).Error("Failed to register custom validator: alpha_space")
+		}
 	}
 }
 

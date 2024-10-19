@@ -1,8 +1,11 @@
 package entity
 
 import (
+	"billing_enginee/internal/entity/enum"
 	"billing_enginee/internal/model"
 	"time"
+
+	logrus "github.com/sirupsen/logrus"
 )
 
 type Payment struct {
@@ -12,28 +15,55 @@ type Payment struct {
 	week    int
 	amount  float64
 	dueDate time.Time
-	status  string
+	status  enum.PaymentStatus
 }
 
-func CreatePayment(loanID uint, week int, amount float64, dueDate time.Time, status string) *Payment {
+func CreatePayment(loanID uint, week int, amount float64, dueDate time.Time, status string) (*Payment, error) {
+	statusEnum, err := enum.ParsePaymentStatus(status)
+	if err != nil {
+		logrus.WithFields(logrus.Fields{
+			"loanID":  loanID,
+			"week":    week,
+			"amount":  amount,
+			"dueDate": dueDate,
+			"status":  status,
+			"error":   err.Error(),
+		}).Error("Failed to parse payment status during CreatePayment")
+		return nil, err
+	}
+
 	return &Payment{
 		loanID:  loanID,
 		week:    week,
 		amount:  amount,
 		dueDate: dueDate,
-		status:  status,
-	}
+		status:  statusEnum,
+	}, nil
 }
 
-func MakePayment(m *model.Payment) *Payment {
+func MakePayment(m *model.Payment) (*Payment, error) {
+	statusEnum, err := enum.ParsePaymentStatus(m.Status)
+	if err != nil {
+		logrus.WithFields(logrus.Fields{
+			"ID":      m.ID,
+			"LoanID":  m.LoanID,
+			"Week":    m.Week,
+			"Amount":  m.Amount,
+			"DueDate": m.DueDate,
+			"Status":  m.Status,
+			"Error":   err.Error(),
+		}).Error("Failed to parse payment status during MakePayment")
+		return nil, err
+	}
+
 	return &Payment{
 		id:      m.ID,
 		loanID:  m.LoanID,
 		week:    m.Week,
 		amount:  m.Amount,
 		dueDate: m.DueDate,
-		status:  m.Status,
-	}
+		status:  statusEnum,
+	}, nil
 }
 
 func (p *Payment) ToModel() *model.Payment {
@@ -43,7 +73,7 @@ func (p *Payment) ToModel() *model.Payment {
 		Week:    p.week,
 		Amount:  p.amount,
 		DueDate: p.dueDate,
-		Status:  p.status,
+		Status:  p.status.String(),
 	}
 }
 
@@ -75,11 +105,20 @@ func (p *Payment) SetLoan(loan *Loan) {
 }
 
 func (p *Payment) Status() string {
-	return p.status
+	return p.status.String()
 }
 
-func (p *Payment) SetStatus(status string) {
-	p.status = status
+func (p *Payment) SetStatus(status string) error {
+	enum, err := enum.ParsePaymentStatus(status)
+	if err != nil {
+		logrus.WithFields(logrus.Fields{
+			"currentStatus": status,
+			"error":         err.Error(),
+		}).Error("Failed to parse and set payment status")
+		return err
+	}
+	p.status = enum
+	return nil
 }
 
 func (p *Payment) Week() int {

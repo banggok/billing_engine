@@ -89,7 +89,11 @@ func (u *loanUsecase) CreateLoan(tx *gorm.DB, customerID uint, name string, emai
 			status = "outstanding"
 		}
 		dueDate := time.Now().AddDate(0, 0, 7*week)
-		payments = append(payments, entity.CreatePayment(loan.GetID(), week, paymentAmount, dueDate, status))
+		x, err := entity.CreatePayment(loan.GetID(), week, paymentAmount, dueDate, status)
+		if err != nil {
+			return nil, err
+		}
+		payments = append(payments, x)
 	}
 
 	if err := u.paymentRepo.SavePayments(tx, payments); err != nil {
@@ -216,7 +220,15 @@ func (u *loanUsecase) updateNextPayment(tx *gorm.DB, loan *entity.Loan) error {
 	}
 
 	if nextPayment == nil {
-		loan.SetStatus("close")
+		if err := loan.SetStatus("close"); err != nil {
+			log.WithFields(log.Fields{
+				"loanID": loan.GetID(),
+				"status": "close",
+				"error":  err,
+			}).Error("Failed to set loan status to closed")
+			return errors.Wrap(err, "failed to set loan status to closed")
+		}
+
 		if err := u.loanRepo.UpdateLoanStatus(tx, loan); err != nil {
 			log.WithFields(log.Fields{
 				"loanID": loan.GetID(),
@@ -228,7 +240,15 @@ func (u *loanUsecase) updateNextPayment(tx *gorm.DB, loan *entity.Loan) error {
 	}
 
 	if nextPayment.Status() == "scheduled" {
-		nextPayment.SetStatus("outstanding")
+		if err := nextPayment.SetStatus("outstanding"); err != nil {
+			log.WithFields(log.Fields{
+				"paymentID": nextPayment.GetID(),
+				"status":    "outstanding",
+				"error":     err,
+			}).Error("Failed to set payment status to outstanding")
+			return errors.Wrap(err, "failed to set payment status to outstanding")
+		}
+
 		if err := u.paymentRepo.UpdatePaymentStatus(tx, nextPayment); err != nil {
 			log.WithFields(log.Fields{
 				"paymentID": nextPayment.GetID(),
@@ -244,7 +264,15 @@ func (u *loanUsecase) updateNextPayment(tx *gorm.DB, loan *entity.Loan) error {
 func (u *loanUsecase) updatePaid(tx *gorm.DB, payments *[]entity.Payment, amount float64) error {
 	for _, payment := range *payments {
 		if amount >= payment.Amount() {
-			payment.SetStatus("paid")
+			if err := payment.SetStatus("paid"); err != nil {
+				log.WithFields(log.Fields{
+					"paymentID": payment.GetID(),
+					"status":    "paid",
+					"error":     err,
+				}).Error("Failed to set payment status to paid")
+				return errors.Wrap(err, "failed to set payment status to paid")
+			}
+
 			amount -= payment.Amount()
 			if err := u.paymentRepo.UpdatePaymentStatus(tx, &payment); err != nil {
 				log.WithFields(log.Fields{

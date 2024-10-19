@@ -1,6 +1,7 @@
 package entity
 
 import (
+	"billing_enginee/internal/entity/enum"
 	"billing_enginee/internal/model"
 	"errors"
 	"math"
@@ -14,7 +15,7 @@ type Loan struct {
 	customerID  uint
 	amount      float64
 	totalAmount float64
-	status      string
+	status      enum.LoanStatus
 	termWeeks   int
 	rates       float64
 	createdAt   time.Time
@@ -32,11 +33,13 @@ func CreateLoan(customerID uint, amount float64, termWeeks int, rates float64) *
 		"rates":       rates,
 		"totalAmount": totalAmount,
 	}).Info("Creating new loan")
+
+	status, _ := enum.ParseLoanStatus("open")
 	return &Loan{
 		customerID:  customerID,
 		amount:      amount,
 		totalAmount: totalAmount,
-		status:      "open",
+		status:      status,
 		termWeeks:   termWeeks,
 		rates:       rates,
 		createdAt:   time.Now(),
@@ -47,11 +50,23 @@ func CreateLoan(customerID uint, amount float64, termWeeks int, rates float64) *
 func MakeLoan(m *model.Loan) (*Loan, error) {
 	if m.Amount <= 0 || m.Rates < 0 || m.TermWeeks <= 0 {
 		logrus.WithFields(logrus.Fields{
-			"amount":    m.Amount,
-			"rates":     m.Rates,
-			"termWeeks": m.TermWeeks,
+			"ID":         m.ID,
+			"CustomerID": m.CustomerID,
+			"Amount":     m.Amount,
+			"Rates":      m.Rates,
+			"TermWeeks":  m.TermWeeks,
+			"Status":     m.Status,
 		}).Error("Invalid loan data for MakeLoan")
 		return nil, errors.New("invalid loan data: amount, rates, and termWeeks must be positive values")
+	}
+
+	status, err := enum.ParseLoanStatus(m.Status)
+	if err != nil {
+		logrus.WithFields(logrus.Fields{
+			"Status": m.Status,
+			"Error":  err.Error(),
+		}).Error("Failed to parse loan status during MakeLoan")
+		return nil, err
 	}
 
 	loan := &Loan{
@@ -59,7 +74,7 @@ func MakeLoan(m *model.Loan) (*Loan, error) {
 		customerID:  m.CustomerID,
 		amount:      m.Amount,
 		totalAmount: m.TotalAmount,
-		status:      m.Status,
+		status:      status,
 		termWeeks:   m.TermWeeks,
 		rates:       m.Rates,
 		createdAt:   m.CreatedAt,
@@ -74,7 +89,16 @@ func MakeLoan(m *model.Loan) (*Loan, error) {
 
 		loan.payments = &[]Payment{}
 		for _, paymentModel := range *m.Payments {
-			paymentEntity := MakePayment(&paymentModel)
+			paymentConvert, err := MakePayment(&paymentModel)
+			if err != nil {
+				logrus.WithFields(logrus.Fields{
+					"loanID":  m.ID,
+					"payment": paymentModel.ID,
+					"error":   err.Error(),
+				}).Error("Failed to convert model payment to entity during MakeLoan")
+				return nil, err
+			}
+			paymentEntity := paymentConvert
 			*loan.payments = append(*loan.payments, *paymentEntity)
 		}
 
@@ -105,7 +129,7 @@ func (l *Loan) ToModel() *model.Loan {
 		CustomerID:  l.customerID,
 		Amount:      l.amount,
 		TotalAmount: l.totalAmount,
-		Status:      l.status,
+		Status:      l.status.String(),
 		TermWeeks:   l.termWeeks,
 		Rates:       l.rates,
 		CreatedAt:   l.createdAt,
@@ -220,15 +244,24 @@ func (l *Loan) GetPayments() *[]Payment {
 }
 
 // SetStatus sets the status of the loan
-func (l *Loan) SetStatus(status string) {
+func (l *Loan) SetStatus(status string) error {
 	logrus.WithFields(logrus.Fields{
 		"loanID": l.id,
 		"status": status,
 	}).Info("Setting loan status")
-	l.status = status
+	statusEnum, err := enum.ParseLoanStatus(status)
+	if err != nil {
+		logrus.WithFields(logrus.Fields{
+			"status": status,
+			"error":  err.Error(),
+		}).Error("Failed to parse and set loan status")
+		return err
+	}
+	l.status = statusEnum
+	return nil
 }
 
 // GetStatus gets the status of the loan
 func (l *Loan) GetStatus() string {
-	return l.status
+	return l.status.String()
 }

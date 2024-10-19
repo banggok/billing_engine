@@ -42,10 +42,24 @@ func (pu *paymentUsecase) RunDaily(tx *gorm.DB, currentDate time.Time) error {
 	for _, payment := range payments {
 		if payment.DueDate().Before(today) {
 			// Mark payments that are overdue as "pending"
-			payment.SetStatus("pending")
+			if err := payment.SetStatus("pending"); err != nil {
+				logrus.WithFields(logrus.Fields{
+					"paymentID": payment.GetID(),
+					"status":    "pending",
+					"error":     err,
+				}).Error("Failed to set payment status to pending")
+				return errors.New("failed to set payment status to pending: " + err.Error())
+			}
 		} else if payment.DueDate().Before(nextWeek) && payment.Status() == "scheduled" {
 			// Mark payments due today as "outstanding"
-			payment.SetStatus("outstanding")
+			if err := payment.SetStatus("outstanding"); err != nil {
+				logrus.WithFields(logrus.Fields{
+					"paymentID": payment.GetID(),
+					"status":    "outstanding",
+					"error":     err,
+				}).Error("Failed to set payment status to outstanding")
+				return errors.New("failed to set payment status to outstanding: " + err.Error())
+			}
 		}
 
 		if err := pu.paymentRepo.UpdatePaymentStatus(tx, payment); err != nil {

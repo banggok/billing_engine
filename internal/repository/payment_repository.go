@@ -36,7 +36,11 @@ func (r *paymentRepository) GetPaymentsDueBeforeDateWithStatus(tx *gorm.DB, next
 
 	payments := make([]*entity.Payment, len(paymentModels))
 	for i, model := range paymentModels {
-		payments[i] = entity.MakePayment(&model)
+		entityConvert, err := entity.MakePayment(&model)
+		if err != nil {
+			return nil, err
+		}
+		payments[i] = entityConvert
 	}
 
 	return payments, nil
@@ -71,7 +75,7 @@ func (r *paymentRepository) GetNextPayment(tx *gorm.DB, loanID uint) (*entity.Pa
 		return nil, errors.Wrap(err, "failed to retrieve next payment")
 	}
 
-	return entity.MakePayment(&paymentModel), nil
+	return entity.MakePayment(&paymentModel)
 }
 
 func (r *paymentRepository) SavePayments(tx *gorm.DB, payments []*entity.Payment) error {
