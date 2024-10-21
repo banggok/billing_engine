@@ -2,6 +2,7 @@ package handler
 
 import (
 	"billing_enginee/internal/usecase"
+	"billing_enginee/pkg"
 	"net/http"
 	"strconv"
 
@@ -23,12 +24,16 @@ func NewCustomerHandler(customerUsecase usecase.CustomerUsecase) *CustomerHandle
 func (h *CustomerHandler) IsDelinquent(c *gin.Context) {
 	customerIDParam := c.Param("customer_id")
 	customerID, err := strconv.ParseUint(customerIDParam, 10, 32)
-	if err != nil {
+	if err != nil || customerID == 0 {
 		log.WithFields(log.Fields{
 			"customerIDParam": customerIDParam,
 			"error":           err,
 		}).Error("Invalid customer ID format")
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid customer ID format"})
+		c.JSON(http.StatusBadRequest, pkg.ErrorResponse{
+			Code:    "INVALID_INPUT",
+			Message: "Customer ID must be a valid positive integer",
+			TraceID: pkg.GenerateTraceID(),
+		})
 		return
 	}
 
