@@ -70,9 +70,9 @@ func main() {
 	router.Use(middleware.TransactionMiddleware(db))
 
 	// Initialize repositories
-	loanRepo := repository.NewLoanRepository()
-	customerRepo := repository.NewCustomerRepository()
-	paymentRepo := repository.NewPaymentRepository()
+	loanRepo := repository.NewLoanRepository(db)
+	customerRepo := repository.NewCustomerRepository(db)
+	paymentRepo := repository.NewPaymentRepository(db)
 
 	// Initialize usecases
 	loanUsecase := usecase.NewLoanUsecase(loanRepo, customerRepo, paymentRepo)

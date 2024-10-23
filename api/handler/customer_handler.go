@@ -8,7 +8,6 @@ import (
 
 	"github.com/gin-gonic/gin"
 	log "github.com/sirupsen/logrus"
-	"gorm.io/gorm"
 )
 
 type CustomerHandler struct {
@@ -37,17 +36,7 @@ func (h *CustomerHandler) IsDelinquent(c *gin.Context) {
 		return
 	}
 
-	tx, err := h.getTransactionFromMiddleware(c)
-	if err != nil {
-		log.WithFields(log.Fields{
-			"customerID": customerID,
-			"error":      err,
-		}).Error("Failed to retrieve transaction")
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to retrieve transaction"})
-		return
-	}
-
-	isDelinquent, err := h.customerUsecase.IsDelinquent(tx, uint(customerID))
+	isDelinquent, err := h.customerUsecase.IsDelinquent(c, uint(customerID))
 	if err != nil {
 		log.WithFields(log.Fields{
 			"customerID": customerID,
@@ -58,14 +47,4 @@ func (h *CustomerHandler) IsDelinquent(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, gin.H{"is_delinquent": isDelinquent})
-}
-
-// Helper function to extract transaction from context
-func (h *CustomerHandler) getTransactionFromMiddleware(c *gin.Context) (*gorm.DB, error) {
-	tx, exists := c.Get("db_tx")
-	if !exists {
-		log.Error("Transaction not found in context")
-		return nil, gorm.ErrInvalidTransaction
-	}
-	return tx.(*gorm.DB), nil
 }

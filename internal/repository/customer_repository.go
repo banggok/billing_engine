@@ -5,24 +5,29 @@ import (
 	"billing_enginee/internal/model"
 	"errors"
 
+	"github.com/gin-gonic/gin"
 	log "github.com/sirupsen/logrus"
 	"gorm.io/gorm"
 )
 
 type CustomerRepository interface {
-	SaveCustomer(tx *gorm.DB, customer *entity.Customer) error
-	GetCustomerByID(tx *gorm.DB, customerID uint) (*entity.Customer, error)
+	SaveCustomer(c *gin.Context, customer *entity.Customer) error
+	GetCustomerByID(c *gin.Context, customerID uint) (*entity.Customer, error)
 }
 
 type customerRepository struct {
+	db *gorm.DB
 }
 
-func NewCustomerRepository() CustomerRepository {
-	return &customerRepository{}
+func NewCustomerRepository(db *gorm.DB) CustomerRepository {
+	return &customerRepository{
+		db: db,
+	}
 }
 
-func (r *customerRepository) SaveCustomer(tx *gorm.DB, customer *entity.Customer) error {
+func (r *customerRepository) SaveCustomer(c *gin.Context, customer *entity.Customer) error {
 	customerModel := customer.ToModel()
+	tx := GetDB(c, r.db)
 
 	if err := tx.Create(&customerModel).Error; err != nil {
 		log.WithFields(log.Fields{
@@ -36,7 +41,9 @@ func (r *customerRepository) SaveCustomer(tx *gorm.DB, customer *entity.Customer
 	return nil
 }
 
-func (r *customerRepository) GetCustomerByID(tx *gorm.DB, customerID uint) (*entity.Customer, error) {
+func (r *customerRepository) GetCustomerByID(c *gin.Context, customerID uint) (*entity.Customer, error) {
+	tx := GetDB(c, r.db)
+
 	var customerModel model.Customer
 	if err := tx.Preload("Loans.Payments").First(&customerModel, customerID).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {

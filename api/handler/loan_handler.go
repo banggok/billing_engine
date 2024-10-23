@@ -3,13 +3,11 @@ package handler
 import (
 	loan_dto_handler "billing_enginee/api/handler/dto/loan"
 	"billing_enginee/internal/usecase"
-	"errors"
 	"net/http"
 	"strconv"
 
 	"github.com/gin-gonic/gin"
 	"github.com/go-playground/validator/v10"
-	"gorm.io/gorm"
 )
 
 type LoanHandler struct {
@@ -38,14 +36,8 @@ func (h *LoanHandler) CreateLoan(c *gin.Context) {
 		return
 	}
 
-	txDB, err := h.getTransactionFromMiddleware(c)
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"errors": err.Error()})
-		return
-	}
-
 	// Create the loan via the usecase
-	response, err := h.loanUsecase.CreateLoan(txDB, request.CustomerID, request.Name, request.Email, request.Amount, request.TermWeeks, request.Rates)
+	response, err := h.loanUsecase.CreateLoan(c, request.CustomerID, request.Name, request.Email, request.Amount, request.TermWeeks, request.Rates)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
@@ -61,16 +53,6 @@ func (h *LoanHandler) CreateLoan(c *gin.Context) {
 	})
 }
 
-func (*LoanHandler) getTransactionFromMiddleware(c *gin.Context) (*gorm.DB, error) {
-	tx, exists := c.Get("db_tx")
-	if !exists {
-		return nil, errors.New("transaction not found")
-	}
-
-	txDB := tx.(*gorm.DB)
-	return txDB, nil
-}
-
 func (h *LoanHandler) GetOutstanding(c *gin.Context) {
 	loanIDParam := c.Param("loan_id")
 	loanID, err := strconv.ParseUint(loanIDParam, 10, 32)
@@ -79,14 +61,8 @@ func (h *LoanHandler) GetOutstanding(c *gin.Context) {
 		return
 	}
 
-	txDB, err := h.getTransactionFromMiddleware(c)
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"errors": err.Error()})
-		return
-	}
-
 	// Get outstanding payments via usecase
-	response, err := h.loanUsecase.GetOutstanding(txDB, uint(loanID))
+	response, err := h.loanUsecase.GetOutstanding(c, uint(loanID))
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
@@ -117,14 +93,8 @@ func (h *LoanHandler) MakePayment(c *gin.Context) {
 		return
 	}
 
-	txDB, err := h.getTransactionFromMiddleware(c)
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"errors": err.Error()})
-		return
-	}
-
 	// Call the use case to process the payment
-	err = h.loanUsecase.MakePayment(txDB, uint(loanID), amount)
+	err = h.loanUsecase.MakePayment(c, uint(loanID), amount)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return

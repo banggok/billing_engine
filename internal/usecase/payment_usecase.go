@@ -32,7 +32,7 @@ func (pu *paymentUsecase) RunDaily(tx *gorm.DB, currentDate time.Time) error {
 	nextWeek = time.Date(nextWeek.Year(), nextWeek.Month(), nextWeek.Day(), 0, 0, 0, 0, nextWeek.Location())
 
 	// Fetch all payments that are scheduled, outstanding, or pending
-	payments, err := pu.paymentRepo.GetPaymentsDueBeforeDateWithStatus(tx, nextWeek)
+	payments, err := pu.paymentRepo.GetPaymentsDueBeforeDateWithStatus(nil, nextWeek)
 	if err != nil {
 		logrus.WithError(err).Error("Error fetching payments")
 		return errors.New("error fetching payments: " + err.Error())
@@ -62,7 +62,7 @@ func (pu *paymentUsecase) RunDaily(tx *gorm.DB, currentDate time.Time) error {
 			}
 		}
 
-		if err := pu.paymentRepo.UpdatePaymentStatus(tx, payment); err != nil {
+		if err := pu.paymentRepo.UpdatePaymentStatus(nil, payment); err != nil {
 			logrus.WithFields(logrus.Fields{
 				"paymentID": payment.GetID(),
 				"error":     err,

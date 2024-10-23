@@ -10,7 +10,7 @@ import (
 	"database/sql"
 
 	"github.com/gin-gonic/gin"
-	. "github.com/onsi/gomega"
+	"github.com/onsi/gomega"
 	"gorm.io/gorm"
 )
 
@@ -36,12 +36,12 @@ func InitializeTestEnvironment() *TestEnvironment {
 	db, sqlDB, _ := pkg.InitTestDB()
 	// Migrate the database schema for testing
 	err := db.AutoMigrate(&model.Customer{}, &model.Loan{}, &model.Payment{})
-	Expect(err).ToNot(HaveOccurred())
+	gomega.Expect(err).ToNot(gomega.HaveOccurred())
 
 	// Initialize repositories
-	loanRepo := repository.NewLoanRepository()
-	customerRepo := repository.NewCustomerRepository()
-	paymentRepo := repository.NewPaymentRepository()
+	loanRepo := repository.NewLoanRepository(db)
+	customerRepo := repository.NewCustomerRepository(db)
+	paymentRepo := repository.NewPaymentRepository(db)
 
 	// Initialize use cases
 	loanUsecase := usecase.NewLoanUsecase(loanRepo, customerRepo, paymentRepo)

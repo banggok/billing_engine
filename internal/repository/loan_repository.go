@@ -4,6 +4,7 @@ import (
 	"billing_enginee/internal/entity"
 	"billing_enginee/internal/model"
 
+	"github.com/gin-gonic/gin"
 	"github.com/pkg/errors" // Use the correct errors package
 
 	log "github.com/sirupsen/logrus"
@@ -11,21 +12,26 @@ import (
 )
 
 type LoanRepository interface {
-	SaveLoan(tx *gorm.DB, loan *entity.Loan) error
-	GetLoanByID(tx *gorm.DB, loanID uint) (*entity.Loan, error)
-	GetOutstandingPayments(tx *gorm.DB, loanID uint) (*entity.Loan, error)
-	UpdateLoanStatus(tx *gorm.DB, loan *entity.Loan) error
+	SaveLoan(c *gin.Context, loan *entity.Loan) error
+	GetLoanByID(c *gin.Context, loanID uint) (*entity.Loan, error)
+	GetOutstandingPayments(c *gin.Context, loanID uint) (*entity.Loan, error)
+	UpdateLoanStatus(c *gin.Context, loan *entity.Loan) error
 }
 
 type loanRepository struct {
+	db *gorm.DB
 }
 
-func NewLoanRepository() LoanRepository {
-	return &loanRepository{}
+func NewLoanRepository(db *gorm.DB) LoanRepository {
+	return &loanRepository{
+		db: db,
+	}
 }
 
-func (r *loanRepository) SaveLoan(tx *gorm.DB, loan *entity.Loan) error {
+func (r *loanRepository) SaveLoan(c *gin.Context, loan *entity.Loan) error {
 	loanModel := loan.ToModel()
+
+	tx := GetDB(c, r.db)
 
 	if err := tx.Create(&loanModel).Error; err != nil {
 		log.WithFields(log.Fields{
@@ -39,8 +45,10 @@ func (r *loanRepository) SaveLoan(tx *gorm.DB, loan *entity.Loan) error {
 	return nil
 }
 
-func (r *loanRepository) GetLoanByID(tx *gorm.DB, loanID uint) (*entity.Loan, error) {
+func (r *loanRepository) GetLoanByID(c *gin.Context, loanID uint) (*entity.Loan, error) {
 	var loanModel model.Loan
+	tx := GetDB(c, r.db)
+
 	if err := tx.First(&loanModel, loanID).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			log.WithField("loanID", loanID).Info("Loan not found")
@@ -61,8 +69,9 @@ func (r *loanRepository) GetLoanByID(tx *gorm.DB, loanID uint) (*entity.Loan, er
 	return loanEntity, nil
 }
 
-func (r *loanRepository) GetOutstandingPayments(tx *gorm.DB, loanID uint) (*entity.Loan, error) {
+func (r *loanRepository) GetOutstandingPayments(c *gin.Context, loanID uint) (*entity.Loan, error) {
 	var loanModel model.Loan
+	tx := GetDB(c, r.db)
 
 	if err := tx.Preload("Payments", func(db *gorm.DB) *gorm.DB {
 		return db.Where("status IN ?", []string{"pending", "outstanding"}).Order("week ASC")
@@ -86,8 +95,9 @@ func (r *loanRepository) GetOutstandingPayments(tx *gorm.DB, loanID uint) (*enti
 	return loanEntity, nil
 }
 
-func (r *loanRepository) UpdateLoanStatus(tx *gorm.DB, loan *entity.Loan) error {
+func (r *loanRepository) UpdateLoanStatus(c *gin.Context, loan *entity.Loan) error {
 	loanModel := loan.ToModel()
+	tx := GetDB(c, r.db)
 
 	if err := tx.Model(&model.Loan{}).Where("id = ?", loanModel.ID).Update("status", loanModel.Status).Error; err != nil {
 		log.WithFields(log.Fields{

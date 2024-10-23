@@ -5,15 +5,16 @@ import (
 	"billing_enginee/internal/repository"
 	"time"
 
+	"github.com/gin-gonic/gin"
 	"github.com/pkg/errors" // Import for error wrapping
 	log "github.com/sirupsen/logrus"
 	"gorm.io/gorm"
 )
 
 type LoanUsecase interface {
-	CreateLoan(tx *gorm.DB, customerID uint, name string, email string, amount float64, termWeeks int, rates float64) (*LoanResponse, error)
-	GetOutstanding(tx *gorm.DB, loanID uint) (*OutstandingResponse, error)
-	MakePayment(tx *gorm.DB, loanID uint, amount float64) error
+	CreateLoan(c *gin.Context, customerID uint, name string, email string, amount float64, termWeeks int, rates float64) (*LoanResponse, error)
+	GetOutstanding(c *gin.Context, loanID uint) (*OutstandingResponse, error)
+	MakePayment(c *gin.Context, loanID uint, amount float64) error
 }
 
 type OutstandingResponse struct {
@@ -50,12 +51,12 @@ type LoanResponse struct {
 	DueDate           time.Time
 }
 
-func (u *loanUsecase) CreateLoan(tx *gorm.DB, customerID uint, name string, email string, amount float64, termWeeks int, rates float64) (*LoanResponse, error) {
-	customer, err := u.customerRepo.GetCustomerByID(tx, customerID)
+func (u *loanUsecase) CreateLoan(c *gin.Context, customerID uint, name string, email string, amount float64, termWeeks int, rates float64) (*LoanResponse, error) {
+	customer, err := u.customerRepo.GetCustomerByID(c, customerID)
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			customer = entity.CreateCustomer(customerID, name, email)
-			if saveErr := u.customerRepo.SaveCustomer(tx, customer); saveErr != nil {
+			if saveErr := u.customerRepo.SaveCustomer(c, customer); saveErr != nil {
 				log.WithFields(log.Fields{
 					"customer": customer,
 					"error":    saveErr,
@@ -73,7 +74,7 @@ func (u *loanUsecase) CreateLoan(tx *gorm.DB, customerID uint, name string, emai
 
 	loan := entity.CreateLoan(customer.GetID(), amount, termWeeks, rates)
 
-	if err := u.loanRepo.SaveLoan(tx, loan); err != nil {
+	if err := u.loanRepo.SaveLoan(c, loan); err != nil {
 		log.WithFields(log.Fields{
 			"loan":  loan,
 			"error": err,
@@ -96,7 +97,7 @@ func (u *loanUsecase) CreateLoan(tx *gorm.DB, customerID uint, name string, emai
 		payments = append(payments, x)
 	}
 
-	if err := u.paymentRepo.SavePayments(tx, payments); err != nil {
+	if err := u.paymentRepo.SavePayments(c, payments); err != nil {
 		log.WithFields(log.Fields{
 			"payments": payments,
 			"error":    err,
@@ -115,8 +116,8 @@ func (u *loanUsecase) CreateLoan(tx *gorm.DB, customerID uint, name string, emai
 	return response, nil
 }
 
-func (u *loanUsecase) GetOutstanding(tx *gorm.DB, loanID uint) (*OutstandingResponse, error) {
-	loan, err := u.loanRepo.GetOutstandingPayments(tx, loanID)
+func (u *loanUsecase) GetOutstanding(c *gin.Context, loanID uint) (*OutstandingResponse, error) {
+	loan, err := u.loanRepo.GetOutstandingPayments(c, loanID)
 	if err != nil {
 		log.WithFields(log.Fields{
 			"loanID": loanID,
@@ -177,8 +178,8 @@ func (u *loanUsecase) GetOutstanding(tx *gorm.DB, loanID uint) (*OutstandingResp
 	return response, nil
 }
 
-func (u *loanUsecase) MakePayment(tx *gorm.DB, loanID uint, amount float64) error {
-	loan, err := u.loanRepo.GetOutstandingPayments(tx, loanID)
+func (u *loanUsecase) MakePayment(c *gin.Context, loanID uint, amount float64) error {
+	loan, err := u.loanRepo.GetOutstandingPayments(c, loanID)
 	if err != nil {
 		log.WithFields(log.Fields{
 			"loanID": loanID,
@@ -198,19 +199,19 @@ func (u *loanUsecase) MakePayment(tx *gorm.DB, loanID uint, amount float64) erro
 		return errors.Wrap(err, "payment amount does not match outstanding balance")
 	}
 
-	if err := u.updatePaid(tx, payments, amount); err != nil {
+	if err := u.updatePaid(c, payments, amount); err != nil {
 		return errors.Wrap(err, "failed to update payments to 'paid'")
 	}
 
-	if err := u.updateNextPayment(tx, loan); err != nil {
+	if err := u.updateNextPayment(c, loan); err != nil {
 		return errors.Wrap(err, "failed to update next payment or close loan")
 	}
 
 	return nil
 }
 
-func (u *loanUsecase) updateNextPayment(tx *gorm.DB, loan *entity.Loan) error {
-	nextPayment, err := u.paymentRepo.GetNextPayment(tx, loan.GetID())
+func (u *loanUsecase) updateNextPayment(c *gin.Context, loan *entity.Loan) error {
+	nextPayment, err := u.paymentRepo.GetNextPayment(c, loan.GetID())
 	if err != nil {
 		log.WithFields(log.Fields{
 			"loanID": loan.GetID(),
@@ -229,7 +230,7 @@ func (u *loanUsecase) updateNextPayment(tx *gorm.DB, loan *entity.Loan) error {
 			return errors.Wrap(err, "failed to set loan status to closed")
 		}
 
-		if err := u.loanRepo.UpdateLoanStatus(tx, loan); err != nil {
+		if err := u.loanRepo.UpdateLoanStatus(c, loan); err != nil {
 			log.WithFields(log.Fields{
 				"loanID": loan.GetID(),
 				"error":  err,
@@ -249,7 +250,7 @@ func (u *loanUsecase) updateNextPayment(tx *gorm.DB, loan *entity.Loan) error {
 			return errors.Wrap(err, "failed to set payment status to outstanding")
 		}
 
-		if err := u.paymentRepo.UpdatePaymentStatus(tx, nextPayment); err != nil {
+		if err := u.paymentRepo.UpdatePaymentStatus(c, nextPayment); err != nil {
 			log.WithFields(log.Fields{
 				"paymentID": nextPayment.GetID(),
 				"loanID":    loan.GetID(),
@@ -261,7 +262,7 @@ func (u *loanUsecase) updateNextPayment(tx *gorm.DB, loan *entity.Loan) error {
 	return nil
 }
 
-func (u *loanUsecase) updatePaid(tx *gorm.DB, payments *[]entity.Payment, amount float64) error {
+func (u *loanUsecase) updatePaid(c *gin.Context, payments *[]entity.Payment, amount float64) error {
 	for _, payment := range *payments {
 		if amount >= payment.Amount() {
 			if err := payment.SetStatus("paid"); err != nil {
@@ -274,7 +275,7 @@ func (u *loanUsecase) updatePaid(tx *gorm.DB, payments *[]entity.Payment, amount
 			}
 
 			amount -= payment.Amount()
-			if err := u.paymentRepo.UpdatePaymentStatus(tx, &payment); err != nil {
+			if err := u.paymentRepo.UpdatePaymentStatus(c, &payment); err != nil {
 				log.WithFields(log.Fields{
 					"paymentID": payment.GetID(),
 					"amount":    payment.Amount(),

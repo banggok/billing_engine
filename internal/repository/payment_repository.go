@@ -5,6 +5,7 @@ import (
 	"billing_enginee/internal/model"
 	"time"
 
+	"github.com/gin-gonic/gin"
 	"github.com/pkg/errors" // Use the correct errors package
 
 	log "github.com/sirupsen/logrus"
@@ -12,21 +13,25 @@ import (
 )
 
 type PaymentRepository interface {
-	GetPaymentsDueBeforeDateWithStatus(tx *gorm.DB, nextWeek time.Time) ([]*entity.Payment, error)
-	UpdatePaymentStatus(tx *gorm.DB, payment *entity.Payment) error
-	GetNextPayment(tx *gorm.DB, loanID uint) (*entity.Payment, error)
-	SavePayments(tx *gorm.DB, payments []*entity.Payment) error
+	GetPaymentsDueBeforeDateWithStatus(c *gin.Context, nextWeek time.Time) ([]*entity.Payment, error)
+	UpdatePaymentStatus(c *gin.Context, payment *entity.Payment) error
+	GetNextPayment(c *gin.Context, loanID uint) (*entity.Payment, error)
+	SavePayments(c *gin.Context, payments []*entity.Payment) error
 }
 
 type paymentRepository struct {
+	db *gorm.DB
 }
 
-func NewPaymentRepository() PaymentRepository {
-	return &paymentRepository{}
+func NewPaymentRepository(db *gorm.DB) PaymentRepository {
+	return &paymentRepository{
+		db: db,
+	}
 }
 
-func (r *paymentRepository) GetPaymentsDueBeforeDateWithStatus(tx *gorm.DB, nextWeek time.Time) ([]*entity.Payment, error) {
+func (r *paymentRepository) GetPaymentsDueBeforeDateWithStatus(c *gin.Context, nextWeek time.Time) ([]*entity.Payment, error) {
 	var paymentModels []model.Payment
+	tx := GetDB(c, r.db)
 
 	if err := tx.Where("DATE(due_date) < ? AND status IN ?", nextWeek.Format("2006-01-02"), []string{"scheduled", "outstanding"}).
 		Find(&paymentModels).Error; err != nil {
@@ -46,7 +51,8 @@ func (r *paymentRepository) GetPaymentsDueBeforeDateWithStatus(tx *gorm.DB, next
 	return payments, nil
 }
 
-func (r *paymentRepository) UpdatePaymentStatus(tx *gorm.DB, payment *entity.Payment) error {
+func (r *paymentRepository) UpdatePaymentStatus(c *gin.Context, payment *entity.Payment) error {
+	tx := GetDB(c, r.db)
 	if err := tx.Model(&model.Payment{}).Where("id = ?", payment.GetID()).Update("status", payment.Status()).Error; err != nil {
 		log.WithFields(log.Fields{
 			"paymentID": payment.GetID(),
@@ -59,8 +65,9 @@ func (r *paymentRepository) UpdatePaymentStatus(tx *gorm.DB, payment *entity.Pay
 	return nil
 }
 
-func (r *paymentRepository) GetNextPayment(tx *gorm.DB, loanID uint) (*entity.Payment, error) {
+func (r *paymentRepository) GetNextPayment(c *gin.Context, loanID uint) (*entity.Payment, error) {
 	var paymentModel model.Payment
+	tx := GetDB(c, r.db)
 	err := tx.Where("loan_id = ? AND status IN ?", loanID, []string{"scheduled", "outstanding"}).Order("week asc").First(&paymentModel).Error
 
 	if err != nil {
@@ -78,7 +85,8 @@ func (r *paymentRepository) GetNextPayment(tx *gorm.DB, loanID uint) (*entity.Pa
 	return entity.MakePayment(&paymentModel)
 }
 
-func (r *paymentRepository) SavePayments(tx *gorm.DB, payments []*entity.Payment) error {
+func (r *paymentRepository) SavePayments(c *gin.Context, payments []*entity.Payment) error {
+	tx := GetDB(c, r.db)
 	paymentModels := make([]model.Payment, len(payments))
 	for i, payment := range payments {
 		paymentModels[i] = *payment.ToModel()

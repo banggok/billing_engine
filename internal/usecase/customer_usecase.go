@@ -3,13 +3,14 @@ package usecase
 import (
 	"billing_enginee/internal/repository"
 
+	"github.com/gin-gonic/gin"
 	"github.com/pkg/errors" // Use the correct package for error wrapping
 	log "github.com/sirupsen/logrus"
 	"gorm.io/gorm"
 )
 
 type CustomerUsecase interface {
-	IsDelinquent(tx *gorm.DB, customerID uint) (bool, error)
+	IsDelinquent(c *gin.Context, customerID uint) (bool, error)
 }
 
 type customerUsecase struct {
@@ -22,8 +23,8 @@ func NewCustomerUsecase(customerRepo repository.CustomerRepository) CustomerUsec
 	}
 }
 
-func (u *customerUsecase) IsDelinquent(tx *gorm.DB, customerID uint) (bool, error) {
-	customer, err := u.customerRepo.GetCustomerByID(tx, customerID)
+func (u *customerUsecase) IsDelinquent(c *gin.Context, customerID uint) (bool, error) {
+	customer, err := u.customerRepo.GetCustomerByID(c, customerID)
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			log.WithField("customerID", customerID).Info("Customer not found")
