@@ -10,7 +10,7 @@ import (
 )
 
 type PaymentUsecase interface {
-	RunDaily(tx *gorm.DB, tm time.Time) error
+	UpdatePaymentStatus(tx *gorm.DB, tm time.Time) error
 }
 
 type paymentUsecase struct {
@@ -23,7 +23,7 @@ func NewPaymentUsecase(paymentRepo repository.PaymentRepository) PaymentUsecase 
 	}
 }
 
-func (pu *paymentUsecase) RunDaily(tx *gorm.DB, currentDate time.Time) error {
+func (pu *paymentUsecase) UpdatePaymentStatus(tx *gorm.DB, currentDate time.Time) error {
 	logrus.Info("Scheduler started: Checking for payments due in a week...")
 
 	// Safely truncate the current date, retaining the timezone and avoiding shifting

@@ -126,7 +126,7 @@ var _ = ginkgo.Describe("Get Outstanding Endpoint", func() {
 
 		// Step 2: Run the scheduler once
 		currentDate := time.Now().AddDate(0, 0, 8) // Move one week ahead
-		err = paymentUsecase.RunDaily(db, currentDate)
+		err = paymentUsecase.UpdatePaymentStatus(db, currentDate)
 		Expect(err).ToNot(HaveOccurred())
 
 		// Verify that the first payment is pending, second is outstanding, ordered by week asc
@@ -188,10 +188,10 @@ var _ = ginkgo.Describe("Get Outstanding Endpoint", func() {
 
 		// Step 2: Run the scheduler twice
 		currentDate := time.Now().AddDate(0, 0, 8) // Move one week ahead
-		err = paymentUsecase.RunDaily(db, currentDate)
+		err = paymentUsecase.UpdatePaymentStatus(db, currentDate)
 		Expect(err).ToNot(HaveOccurred())
 		currentDate = time.Now().AddDate(0, 0, 15) // Move another week ahead
-		err = paymentUsecase.RunDaily(db, currentDate)
+		err = paymentUsecase.UpdatePaymentStatus(db, currentDate)
 		Expect(err).ToNot(HaveOccurred())
 
 		// Verify that the first two payments are pending, third is outstanding, ordered by week asc

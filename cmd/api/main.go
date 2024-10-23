@@ -1,143 +1,135 @@
+// cmd/api/main.go
 package main
 
 import (
 	"billing_enginee/api/middleware"
 	"billing_enginee/api/routes"
-	"billing_enginee/internal/repository"
+	"billing_enginee/internal/runner"
 	"billing_enginee/internal/usecase"
 	"billing_enginee/pkg"
+	"billing_enginee/pkg/container"
 	"context"
+	"database/sql"
+	"fmt"
 	"net/http"
 	"os"
 	"os/signal"
-	"strconv"
 	"syscall"
 	"time"
 
-	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
-	"github.com/joho/godotenv"
 	"github.com/robfig/cron/v3"
 	log "github.com/sirupsen/logrus"
 	"gorm.io/gorm"
 )
 
 func main() {
-	// Load environment variables from .env file
-	if err := godotenv.Load(); err != nil {
-		log.Fatalf("Error loading .env file: %v", err)
-	}
+	// Load environment variables
+	pkg.LoadEnv(".env")
 
-	// Set up logrus logging format and level
-	log.SetFormatter(&log.JSONFormatter{})
-	log.SetLevel(log.InfoLevel)
+	// Set up logging
+	pkg.SetupLogger()
 
-	// Initialize the Gin router
-	router := gin.Default()
-
-	// Initialize custom validators globally
-	pkg.InitValidators()
-
-	// CORS configuration
-	router.Use(cors.New(cors.Config{
-		AllowOrigins:     []string{"http://localhost:5173"}, // Allow frontend origin
-		AllowMethods:     []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"},
-		AllowHeaders:     []string{"Origin", "Content-Type", "Accept", "Authorization"},
-		AllowCredentials: true,
-	}))
-
-	// Read ReadHeaderTimeout from the .env file and convert to time.Duration
-	readHeaderTimeoutStr := os.Getenv("READ_HEADER_TIMEOUT")
-	readHeaderTimeout, err := strconv.Atoi(readHeaderTimeoutStr)
-	if err != nil || readHeaderTimeout <= 0 {
-		log.Warn("Invalid or missing READ_HEADER_TIMEOUT, defaulting to 10 seconds")
-		readHeaderTimeout = 10 // default to 10 seconds if the env variable is invalid or missing
-	}
-
-	// Initialize the database
-	db, sqlDB, err := pkg.InitDB()
+	// Create dependency container
+	c, err := container.NewContainer()
 	if err != nil {
-		log.WithError(err).Fatal("Failed to initialize the database")
+		log.Fatalf("Failed to initialize dependencies: %v", err)
 	}
-	defer func() {
-		if err := sqlDB.Close(); err != nil {
-			log.WithError(err).Fatal("Failed to close database connection")
-		}
-		log.Info("Database connection closed gracefully")
-	}()
+	defer closeResources(c.SQLDB)
 
-	// Apply the transaction middleware globally
-	router.Use(middleware.TransactionMiddleware(db))
+	// Set up middleware
+	setupMiddleware(c.Router, c.DB)
 
-	// Initialize repositories
-	loanRepo := repository.NewLoanRepository(db)
-	customerRepo := repository.NewCustomerRepository(db)
-	paymentRepo := repository.NewPaymentRepository(db)
+	// Set up HTTP routes
+	setupRoutes(c.Router, c.CustomerUsecase, c.LoanUsecase)
 
-	// Initialize usecases
-	loanUsecase := usecase.NewLoanUsecase(loanRepo, customerRepo, paymentRepo)
-	paymentUsecase := usecase.NewPaymentUsecase(paymentRepo)
-	customerUsecase := usecase.NewCustomerUsecase(customerRepo)
+	// Initialize and register scheduler tasks
+	scheduler := startScheduler()
+	registerSchedulerTasks(scheduler, c.PaymentUsecase, c.DB)
 
-	// Start the daily scheduler
-	go startScheduler(db, paymentUsecase)
+	// Start HTTP server
+	srv := createHTTPServer(c.Router)
+	startHTTPServer(srv)
 
-	// Setup routes
-	routes.SetupCustomerRoutes(router, customerUsecase)
-	routes.SetupLoanRoutes(router, loanUsecase)
-
-	// Create the HTTP server
-	srv := &http.Server{
-		Addr:              ":8080",
-		Handler:           router,
-		ReadHeaderTimeout: time.Duration(readHeaderTimeout) * time.Second, // Protect from Slowloris attack
-	}
-
-	// Start the server in a goroutine
-	go func() {
-		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-			log.WithError(err).Fatal("Server error")
-		}
-	}()
-	log.Info("Server running on port 8080")
-
-	// Create a channel to listen for OS signals
-	quit := make(chan os.Signal, 1)
-	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
-
-	// Block until a signal is received
-	sig := <-quit
-	log.WithField("signal", sig).Info("Received shutdown signal, shutting down server...")
-
-	// Create a context with a timeout to allow for graceful shutdown
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
-
-	// Attempt graceful server shutdown
-	if err := srv.Shutdown(ctx); err != nil {
-		log.WithError(err).Fatal("Server forced to shutdown")
-	}
-
-	log.Info("Server exited gracefully")
+	// Handle graceful shutdown
+	gracefulShutdown(srv, scheduler)
 }
 
-// startScheduler runs the daily task at 00:00:00 UTC+7
-func startScheduler(db *gorm.DB, paymentUsecase usecase.PaymentUsecase) {
-	// Set up the cron scheduler
+// startScheduler initializes and starts the cron scheduler.
+func startScheduler() *cron.Cron {
 	c := cron.New(cron.WithLocation(time.FixedZone("Asia/Jakarta", 7*60*60))) // UTC+7
+	c.Start()
+	return c
+}
 
-	// Schedule the job to run daily at midnight (00:00)
-	_, err := c.AddFunc("0 0 * * *", func() {
-		log.Info("Running daily scheduler...")
-		if err := paymentUsecase.RunDaily(db, time.Now()); err != nil {
-			log.WithError(err).Error("Error running daily scheduler")
-		}
-	})
+// registerSchedulerTasks registers tasks to be run by the scheduler.
+func registerSchedulerTasks(scheduler *cron.Cron, paymentUsecase usecase.PaymentUsecase, db *gorm.DB) {
+	// Register tasks separately
+	runner.RegisterUpdatePaymentStatusScheduler(scheduler, paymentUsecase, db)
 
-	if err != nil {
-		log.WithError(err).Fatal("Failed to schedule daily task")
+	// Easily add more scheduled tasks by calling other functions here
+}
+
+// setupMiddleware applies global middleware to the router.
+func setupMiddleware(router *gin.Engine, db *gorm.DB) {
+	// Apply CORS, logging, and any other middleware
+	router.Use(middleware.TransactionMiddleware(db))
+	// Add more middleware as needed
+}
+
+// closeResources closes the SQL database connection gracefully.
+func closeResources(sqlDB *sql.DB) {
+	if err := sqlDB.Close(); err != nil {
+		log.Errorf("Error closing DB connection: %v", err)
+	}
+	log.Info("Resources closed gracefully")
+}
+
+// setupRoutes registers the application routes with the router.
+func setupRoutes(router *gin.Engine, customerUsecase usecase.CustomerUsecase, loanUsecase usecase.LoanUsecase) {
+	routes.SetupCustomerRoutes(router, customerUsecase)
+	routes.SetupLoanRoutes(router, loanUsecase)
+	// Add more route setups as needed
+}
+
+// createHTTPServer creates and configures an HTTP server.
+func createHTTPServer(router *gin.Engine) *http.Server {
+	// Load the port from the environment variable, with a default if not set
+	port := os.Getenv("PORT")
+	if port == "" {
+		port = "8080" // Default port
 	}
 
-	// Start the cron scheduler
-	c.Start()
+	return &http.Server{
+		Addr:    fmt.Sprintf(":%s", port), // Set the address using the port
+		Handler: router,
+	}
+}
+
+// startHTTPServer starts the HTTP server in a separate goroutine.
+func startHTTPServer(srv *http.Server) {
+	go func() {
+		log.Infof("Server running on port %s", srv.Addr)
+		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+			log.Fatalf("Server error: %v", err)
+		}
+	}()
+}
+
+// gracefulShutdown handles the graceful shutdown of the HTTP server upon receiving a termination signal.
+func gracefulShutdown(srv *http.Server, scheduler *cron.Cron) {
+	quit := make(chan os.Signal, 1)
+	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
+	<-quit
+	log.Info("Shutting down server...")
+
+	// Stop scheduler
+	scheduler.Stop()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	if err := srv.Shutdown(ctx); err != nil {
+		log.Fatalf("Failed to gracefully shutdown: %v", err)
+	}
+	log.Info("Server exited gracefully")
 }

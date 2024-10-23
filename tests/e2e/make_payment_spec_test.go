@@ -102,7 +102,7 @@ var _ = ginkgo.Describe("MakePayment Endpoint", func() {
 
 		// Step 2: Run scheduler for one week ahead
 		currentDate := time.Now().AddDate(0, 0, 8)
-		err = paymentUsecase.RunDaily(db, currentDate)
+		err = paymentUsecase.UpdatePaymentStatus(db, currentDate)
 		Expect(err).ToNot(HaveOccurred())
 
 		// Step 3: Make a payment
@@ -142,11 +142,11 @@ var _ = ginkgo.Describe("MakePayment Endpoint", func() {
 
 		// Step 2: Run scheduler for two weeks ahead (simulate two weeks of payments)
 		currentDate := time.Now().AddDate(0, 0, 8) // 1st week
-		err = paymentUsecase.RunDaily(db, currentDate)
+		err = paymentUsecase.UpdatePaymentStatus(db, currentDate)
 		Expect(err).ToNot(HaveOccurred())
 
 		currentDate = time.Now().AddDate(0, 0, 15) // 2nd week
-		err = paymentUsecase.RunDaily(db, currentDate)
+		err = paymentUsecase.UpdatePaymentStatus(db, currentDate)
 		Expect(err).ToNot(HaveOccurred())
 
 		// Step 3: Make payment for the full outstanding balance (weeks 1, 2, and 3)
