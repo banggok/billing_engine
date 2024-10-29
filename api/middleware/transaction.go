@@ -24,6 +24,15 @@ func TransactionMiddleware(db *gorm.DB) gin.HandlerFunc {
 		// Store the transaction in the context
 		c.Set("db_tx", tx)
 
+		// Ensure rollback if panic occurs
+		defer func() {
+			if r := recover(); r != nil {
+				tx.Rollback()
+				log.WithField("panic", r).Error("Panic occurred, transaction rolled back")
+				c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{"error": "Unexpected server error"})
+			}
+		}()
+
 		// Process the request
 		c.Next()
 
